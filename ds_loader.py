@@ -1,5 +1,9 @@
 import xml.etree.ElementTree as ET
 
+import numpy as np
+from nltk import FreqDist
+from sklearn.model_selection import train_test_split
+
 
 class Entry:
     def __init__(self, text, opinions):
@@ -28,7 +32,7 @@ def load_dataset(path):
                 if not opinions_list:
                     continue
 
-                opinions = opinions_list.find('Opinion')
+                opinions = opinions_list.findall('Opinion')
 
                 parsed_opinions = []
                 for opinion in opinions:
@@ -40,7 +44,74 @@ def load_dataset(path):
 
                 entry = Entry(
                     text=text.text,
-                    opinions=opinions)
+                    opinions=parsed_opinions)
                 dataset.append(entry)
 
     return dataset
+
+
+def get_acd_ds(source_ds, fdist, feature_extractor):
+    features, label, labels = [], [], []
+
+    common_categories = list(map(lambda pair: pair[0], fdist.most_common(19)))
+
+    for source_entry in source_ds:
+        opinion_labels = []
+        for opinion in source_entry.opinions:
+            features.append(feature_extractor(source_entry.text))
+
+            if opinion.category not in common_categories:
+                opinion.category = 'OTHER#OTHER'
+
+            label.append(opinion.category)
+
+            # collect all labels for the entry
+            opinion_labels.append(opinion.category)
+
+        labels.append(opinion_labels * len(source_entry.opinions))
+
+    return np.array(features), np.array(label), labels
+
+
+def split_ds(X, y):
+    return train_test_split(X, y, test_size=0.2)
+
+
+def category_fdist(ds):
+    fdist = FreqDist()
+    for entry in ds:
+        for opinion in entry.opinions:
+            fdist[opinion.category] += 1
+
+    return fdist
+
+
+def get_f1(predictions, classes, actuals, step):
+    tn, tp, fp, fn = 0, 0, 0, 0
+
+    for prediction_id, prediction in enumerate(predictions):
+        predicted_classes = []
+        for i, prob in enumerate(prediction):
+            if prob > step:
+                predicted_classes.append(classes[i])
+
+        predicted_classes = set(predicted_classes)
+        actual_classes = set(actuals[prediction_id])
+
+        tp += len(predicted_classes.intersection(actual_classes))
+        fp += len(predicted_classes - actual_classes)
+        fn += len(actual_classes - predicted_classes)
+
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+
+    f1 = (2 * precision * recall) / (precision + recall)
+
+    return {
+        'f1': f1,
+        'precision': precision,
+        'recall': recall,
+        'tp': tp,
+        'fp': fp,
+        'fn': fn,
+    }
