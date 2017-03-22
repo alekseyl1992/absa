@@ -1,7 +1,8 @@
 import gensim
 import numpy as np
-from nltk import PorterStemmer
+from nltk import PorterStemmer, pprint
 from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import validation_curve
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from nltk.tokenize import WordPunctTokenizer
@@ -70,12 +71,46 @@ class ACD:
 
         return result
 
+    def fit_and_evaluate(self, clf, x_train, y_train, x_test, y_test, labels_train, labels_test):
+        clf.fit(x_train, y_train)
+
+        print('Evaluating...')
+        classes = clf.classes_
+        predictions = clf.predict_proba(x_test)
+
+        for step in [0.001, 0.003, 0.005, 0.007, 0.01, 0.02, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.5]:
+            f1 = get_f1(predictions, classes, labels_test, step)
+            print('F1: {}, step: {}'.format(f1, step))
+
+    def learning_curve(self, clf, x_train, y_train, x_test, y_test):
+        cv = ShuffleSplit(n_splits=100, test_size=0.2, random_state=0)
+        plot_learning_curve(
+            estimator=clf,
+            X=x_train,
+            y=y_train,
+            cv=cv,
+            title='Learning curve',
+            n_jobs=4
+        )
+
+    def validation_curve(self, clf, x_train, y_train, x_test, y_test):
+        space = np.arange(1, 1000, 100, dtype=int)
+
+        train_scores, valid_scores = validation_curve(
+            clf, x_train, y_train, 'max_iter', space)
+
+        print('Train Scores:')
+        pprint(dict(zip(space, train_scores)))
+
+        print('Valid Scores:')
+        pprint(dict(zip(space, valid_scores)))
+
     def test_acd(self):
         print('Loading w2v...')
 
         self.w2v = W2VMock()
-        # self.w2v = gensim.models.KeyedVectors.load_word2vec_format(
-        #     'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
+        self.w2v = gensim.models.KeyedVectors.load_word2vec_format(
+            'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
 
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
@@ -87,35 +122,17 @@ class ACD:
         ds = load_dataset('data/laptops_train.xml')
         fdist = category_fdist(ds)
         x, y, labels = get_acd_ds(ds, fdist, self.get_acd_features)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
+        x_train, x_test, y_train, y_test, labels_train, labels_test \
+            = split_ds(x, y, labels)
 
         # clf = SVC(kernel='rbf', probability=True)
-        clf = MLPClassifier(max_iter=2000,
+        clf = MLPClassifier(max_iter=500,
                             hidden_layer_sizes=(20,),
                             activation='logistic',
                             learning_rate='adaptive')
 
         print('Training...')
-        # clf.fit(x_train, y_train)
-
-        cv = ShuffleSplit(n_splits=100, test_size=0.2, random_state=0)
-        plot_learning_curve(
-            estimator=clf,
-            X=x_train,
-            y=y_train,
-            cv=cv,
-            title='Learning curve',
-            n_jobs=4
-        )
-
-        # print('Evaluating...')
-        # classes = clf.classes_
-        # predictions = clf.predict_proba(x_test)
-        #
-        # for step in [0.001, 0.003, 0.005, 0.007, 0.01, 0.02, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.5]:
-        #     f1 = get_f1(predictions, classes, labels, step)
-        #     print('F1: {}, step: {}'.format(f1, step))
-
+        self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, labels_train, labels_test)
 
 if __name__ == '__main__':
     acd = ACD()

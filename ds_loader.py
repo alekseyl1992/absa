@@ -60,21 +60,37 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
         for opinion in source_entry.opinions:
             features.append(feature_extractor(source_entry.text))
 
-            if opinion.category not in common_categories:
-                opinion.category = 'OTHER#OTHER'
+            # if opinion.category not in common_categories:
+            #     opinion.category = 'OTHER#OTHER'
 
             label.append(opinion.category)
 
             # collect all labels for the entry
             opinion_labels.append(opinion.category)
 
-        labels.append(opinion_labels * len(source_entry.opinions))
+        # add all labels for each sample
+        added_samples = len(source_entry.opinions)
+        for i in range(added_samples):
+            labels.append(opinion_labels * added_samples)
 
     return np.array(features), np.array(label), labels
 
 
-def split_ds(X, y):
-    return train_test_split(X, y, test_size=0.2)
+def split_ds(x, y, labels, test_size=0.2):
+    assert len(x) == len(y)
+    assert len(y) == len(labels)
+
+    train_idx = int(len(x) * (1.0 - test_size))
+
+    x_train = x[:train_idx]
+    y_train = y[:train_idx]
+    labels_train = labels[:train_idx]
+
+    x_test = x[train_idx:]
+    y_test = y[train_idx:]
+    labels_test = labels[train_idx:]
+
+    return x_train, x_test, y_train, y_test, labels_train, labels_test
 
 
 def category_fdist(ds):
@@ -88,6 +104,8 @@ def category_fdist(ds):
 
 def get_f1(predictions, classes, actuals, step):
     tn, tp, fp, fn = 0, 0, 0, 0
+
+    assert len(predictions) == len(actuals)
 
     for prediction_id, prediction in enumerate(predictions):
         predicted_classes = []
