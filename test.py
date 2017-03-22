@@ -4,6 +4,7 @@ from nltk import PorterStemmer, pprint
 from sklearn.model_selection import ShuffleSplit
 from sklearn.model_selection import validation_curve
 from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.svm import SVC
 from nltk.tokenize import WordPunctTokenizer
 
@@ -71,15 +72,16 @@ class ACD:
 
         return result
 
-    def fit_and_evaluate(self, clf, x_train, y_train, x_test, y_test, labels_train, labels_test):
+    def fit_and_evaluate(self, clf, x_train, y_train, x_test, y_test, mlb):
         clf.fit(x_train, y_train)
 
         print('Evaluating...')
         classes = clf.classes_
-        predictions = clf.predict_proba(x_test)
+        predictions = clf.predict(x_test)
+        predictions = mlb.inverse_transform(predictions)
 
         for step in [0.001, 0.003, 0.005, 0.007, 0.01, 0.02, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.5]:
-            f1 = get_f1(predictions, classes, labels_test, step)
+            f1 = get_f1(predictions, classes, y_test, step)
             print('F1: {}, step: {}'.format(f1, step))
 
     def learning_curve(self, clf, x_train, y_train, x_test, y_test):
@@ -121,9 +123,11 @@ class ACD:
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
         fdist = category_fdist(ds)
-        x, y, labels = get_acd_ds(ds, fdist, self.get_acd_features)
-        x_train, x_test, y_train, y_test, labels_train, labels_test \
-            = split_ds(x, y, labels)
+        x, y = get_acd_ds(ds, fdist, self.get_acd_features)
+        x_train, x_test, y_train, y_test = split_ds(x, y)
+
+        mlb = MultiLabelBinarizer()
+        y_train = mlb.fit_transform(y_train)
 
         # clf = SVC(kernel='rbf', probability=True)
         clf = MLPClassifier(max_iter=500,
@@ -132,7 +136,8 @@ class ACD:
                             learning_rate='adaptive')
 
         print('Training...')
-        self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, labels_train, labels_test)
+        self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, mlb)
+
 
 if __name__ == '__main__':
     acd = ACD()

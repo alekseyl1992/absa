@@ -1,6 +1,7 @@
 from pprint import pprint
 
 from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing import MultiLabelBinarizer
 
 x = [
@@ -23,3 +24,6 @@ clf.fit(x, y_bin)
 
 pred = clf.predict_proba(x)
 pprint(pred)
+
+all_labels = mlb.inverse_transform(pred)
+pprint(all_labels)
