@@ -59,7 +59,7 @@ class ACD:
 
         for token in tokens:
             # token = self.stemmer.stem(token)
-            if token in self.w2v.vocab and token not in self.stop_words:
+            if token in self.w2v.vocab:
                 vector = self.w2v.word_vec(token)
                 vectors.append(vector)
 
@@ -76,11 +76,11 @@ class ACD:
         clf.fit(x_train, y_train)
 
         print('Evaluating...')
-        classes = clf.classes_
-        predictions = clf.predict(x_test)
-        predictions = mlb.inverse_transform(predictions)
+        classes = mlb.classes_
+        predictions = clf.predict_proba(x_test)
 
-        for step in [0.001, 0.003, 0.005, 0.007, 0.01, 0.02, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.5]:
+        for step in [0.005, 0.01, 0.05, 0.07, 0.08, 0.09,
+                     0.1, 0.13, 0.15, 0.17, 0.2, 0.23, 0.25, 0.27, 0.3, 0.5]:
             f1 = get_f1(predictions, classes, y_test, step)
             print('F1: {}, step: {}'.format(f1, step))
 

@@ -99,7 +99,12 @@ def get_f1(predictions, classes, actuals, step):
     assert len(predictions) == len(actuals)
 
     for prediction_id, prediction in enumerate(predictions):
-        predicted_classes = set(prediction)
+        predicted_classes = []
+        for i, p in enumerate(prediction):
+            if p > step:
+                predicted_classes.append(classes[i])
+        predicted_classes = set(predicted_classes)
+
         actual_classes = set(actuals[prediction_id])
 
         tp += len(predicted_classes.intersection(actual_classes))
