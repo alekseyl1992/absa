@@ -1,15 +1,21 @@
 import gensim
 import numpy as np
 from nltk import PorterStemmer, pprint
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.grid_search import GridSearchCV
 from sklearn.model_selection import ShuffleSplit
 from sklearn.model_selection import validation_curve
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from nltk.tokenize import WordPunctTokenizer
 
 from ds_loader import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist
 from plotter import plot_learning_curve
+
+from matplotlib import pyplot as plt
 
 
 def test_load_dataset():
@@ -39,6 +45,7 @@ class ACD:
         self.w2v = None
         self.tokenizer = None
         self.stemmer = None
+        self.mlb = None
 
         self.stop_words = [
             'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
@@ -59,7 +66,7 @@ class ACD:
 
         for token in tokens:
             # token = self.stemmer.stem(token)
-            if token in self.w2v.vocab:
+            if token in self.w2v.vocab and token not in self.stop_words:
                 vector = self.w2v.word_vec(token)
                 vectors.append(vector)
 
@@ -95,24 +102,39 @@ class ACD:
             n_jobs=4
         )
 
-    def validation_curve(self, clf, x_train, y_train, x_test, y_test):
-        space = np.arange(1, 1000, 100, dtype=int)
+    def scoring_fun(self, clf, x, y):
+        classes = self.mlb.classes_
+        predictions = clf.predict_proba(x)
 
+        assert len(predictions[0]) == len(classes)
+
+        f1s = []
+        for step in np.arange(0.01, 0.5, 0.05):
+            actuals = self.mlb.inverse_transform(y)
+            f1 = get_f1(predictions, classes, actuals, step)
+            f1s.append(f1['f1'])
+
+        max_f1 = np.max(f1s)
+        return max_f1
+
+    def validation_curve(self, clf, x, y, param_name, param_range):
         train_scores, valid_scores = validation_curve(
-            clf, x_train, y_train, 'max_iter', space)
+            clf, x, y,
+            param_name=param_name,
+            param_range=param_range,
+            scoring=self.scoring_fun)
 
         print('Train Scores:')
-        pprint(dict(zip(space, train_scores)))
+        pprint(dict(zip(param_range, train_scores)))
 
         print('Valid Scores:')
-        pprint(dict(zip(space, valid_scores)))
+        pprint(dict(zip(param_range, valid_scores)))
 
     def test_acd(self):
         print('Loading w2v...')
 
         self.w2v = W2VMock()
-        self.w2v = gensim.models.KeyedVectors.load_word2vec_format(
-            'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
+        self.w2v = gensim.models.KeyedVectors.load_word2vec_format('pretrained/GoogleNews-vectors-negative300.bin', binary=True)
 
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
@@ -124,19 +146,108 @@ class ACD:
         ds = load_dataset('data/laptops_train.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
+        # x_train, x_test, y_train, y_test = split_ds(x, y)
 
-        mlb = MultiLabelBinarizer()
-        y_train = mlb.fit_transform(y_train)
+        self.mlb = MultiLabelBinarizer()
+        # y_train = self.mlb.fit_transform(y_train)
+        # y_test = self.mlb.fit_transform(y_test)
 
-        # clf = SVC(kernel='rbf', probability=True)
-        clf = MLPClassifier(max_iter=500,
-                            hidden_layer_sizes=(20,),
-                            activation='logistic',
-                            learning_rate='adaptive')
+        # clf = OneVsRestClassifier(SVC(kernel='rbf', probability=True))
+        # clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=10))
+        # clf = OneVsRestClassifier(GaussianNB())
+        # clf = MLPClassifier(max_iter=500,
+        #                     hidden_layer_sizes=(20,),
+        #                     activation='logistic',
+        #                     learning_rate='adaptive')
+
+        tasks = [
+            {
+                'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True)),
+                'name': 'SVM',
+                'params': {
+                    # 'estimator__kernel': ('linear', 'rbf'),
+                    'estimator__C': np.linspace(0.1, 1.0, num=10)
+                }
+            },
+            {
+                'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
+                'name': 'Random Forest',
+                'params': {
+                    'estimator__n_estimators': np.arange(1, 20, step=1)
+                }
+            },
+            {
+                'clf': OneVsRestClassifier(GaussianNB()),
+                'name': 'Gaussian NB',
+                'params': {
+                    'estimator__priors': [None]
+                }
+            },
+            {
+                'clf': MLPClassifier(max_iter=500,
+                                     hidden_layer_sizes=(20,),
+                                     activation='logistic',
+                                     learning_rate='adaptive'),
+                'name': 'MLP',
+                'params': {
+                    'max_iter': np.arange(100, 2000, step=100)
+                }
+            }
+        ]
+
+        y = self.mlb.fit_transform(y)
+
+        import warnings
+        warnings.filterwarnings("ignore")
+
+        for _, task in enumerate(tasks):
+            name = task['name']
+            clf = task['clf']
+            params = task['params']
+            print('Running {}...'.format(name))
+
+            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun)
+            grid_cv.fit(x, y)
+
+            scores = grid_cv.grid_scores_
+            pprint(scores)
+
+            plt.figure(_)
+
+            plt_x_name = list(params.keys())[0]
+            plt_y_name = 'Mean F1'
+
+            plt_x = list(map(
+                lambda s: s.parameters[plt_x_name],
+                scores
+            ))
+            plt_y = list(map(
+                lambda s: s.mean_validation_score,
+                scores
+            ))
+
+            plt.title(name)
+            plt.xlabel(plt_x_name)
+            plt.ylabel(plt_y_name)
+
+            plt.plot(plt_x, plt_y)
+        plt.show()
+
+        return
 
         print('Training...')
-        self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, mlb)
+        # self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, self.mlb)
+
+        y = self.mlb.fit_transform(y)
+        # self.validation_curve(clf, x, y,
+        #                       param_name='max_iter',
+        #                       param_range=np.arange(200, 2000, 100, dtype=int))
+        # self.validation_curve(clf, x, y,
+        #                       param_name='estimator__C',
+        #                       param_range=np.linspace(0.1, 1.0, num=10))
+        self.validation_curve(clf, x, y,
+                              param_name='estimator__priors',
+                              param_range=[None])
 
 
 if __name__ == '__main__':

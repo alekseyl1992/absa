@@ -96,7 +96,8 @@ def category_fdist(ds):
 def get_f1(predictions, classes, actuals, step):
     tn, tp, fp, fn = 0, 0, 0, 0
 
-    assert len(predictions) == len(actuals)
+    assert len(predictions) == len(actuals), \
+        'len(predictions)={}, len(actuals)={}'.format(len(predictions), len(actuals))
 
     for prediction_id, prediction in enumerate(predictions):
         predicted_classes = []
@@ -111,10 +112,14 @@ def get_f1(predictions, classes, actuals, step):
         fp += len(predicted_classes - actual_classes)
         fn += len(actual_classes - predicted_classes)
 
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-
-    f1 = (2 * precision * recall) / (precision + recall)
+    if tp != 0:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = (2 * precision * recall) / (precision + recall)
+    else:
+        precision = 0
+        recall = 0
+        f1 = 0
 
     return {
         'f1': f1,
