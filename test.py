@@ -166,21 +166,21 @@ class ACD:
                 'name': 'SVM',
                 'params': {
                     # 'estimator__kernel': ('linear', 'rbf'),
-                    'estimator__C': np.linspace(0.1, 1.0, num=10)
+                    'estimator__C': np.linspace(0.1, 5.0, num=20)
                 }
             },
             {
                 'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
                 'name': 'Random Forest',
                 'params': {
-                    'estimator__n_estimators': np.arange(1, 20, step=1)
+                    'estimator__n_estimators': np.arange(1, 60, step=2)
                 }
             },
             {
                 'clf': OneVsRestClassifier(GaussianNB()),
                 'name': 'Gaussian NB',
                 'params': {
-                    'estimator__priors': [None]
+                    'n_jobs': [1, 1]
                 }
             },
             {
@@ -188,9 +188,19 @@ class ACD:
                                      hidden_layer_sizes=(20,),
                                      activation='logistic',
                                      learning_rate='adaptive'),
-                'name': 'MLP',
+                'name': 'MLP (20)',
                 'params': {
                     'max_iter': np.arange(100, 2000, step=100)
+                }
+            },
+            {
+                'clf': MLPClassifier(max_iter=500,
+                                     hidden_layer_sizes=(156,),
+                                     activation='logistic',
+                                     learning_rate='adaptive'),
+                'name': 'MLP (156)',
+                'params': {
+                    'max_iter': np.arange(100, 3000, step=200)
                 }
             }
         ]
