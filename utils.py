@@ -71,6 +71,22 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
     return np.array(features), np.array(labels)
 
 
+def get_pd_ds(source_ds, feature_extractor):
+    features, labels = [], []
+
+    ds_len = len(source_ds)
+    for i, source_entry in enumerate(source_ds):
+        cats_len = len(source_entry.opinions)
+        for opinion in source_entry.opinions:
+            features.append(feature_extractor(source_entry.text, opinion.category, cats_len))
+            labels.append(opinion.polarity)
+
+        if i % 100 == 0:
+            print('get_pd_ds progress: {}/{}'.format(i, ds_len))
+
+    return np.array(features), np.array(labels)
+
+
 def split_ds(x, y, test_size=0.2):
     assert len(x) == len(y)
 
@@ -132,9 +148,22 @@ def get_f1(predictions, classes, actuals, step):
     }
 
 
-def load_w2v():
-    print('Loading w2v...')
-    w2v = gensim.models.KeyedVectors.load_word2vec_format(
-        'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
+class W2VMock:
+    def __init__(self):
+        self.vocab = []
+
+    def word_vector(self, word):
+        return np.zeros(300)
+
+
+def load_w2v(use_mock=False):
+    if use_mock:
+        print('Loading mock w2v...')
+        w2v = W2VMock()
+    else:
+        print('Loading real w2v...')
+        w2v = gensim.models.KeyedVectors.load_word2vec_format(
+            'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
+
     print('Done')
     return w2v

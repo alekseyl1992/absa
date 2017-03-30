@@ -1,4 +1,7 @@
+import string
+
 import gensim
+import nltk
 import numpy as np
 from nltk import PorterStemmer, pprint
 from sklearn.ensemble import RandomForestClassifier
@@ -12,41 +15,17 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.svm import SVC, LinearSVC
 from nltk.tokenize import WordPunctTokenizer
 
-from ds_loader import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist, load_w2v
+from utils import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist, load_w2v
 from plotter import plot_learning_curve
 
 from matplotlib import pyplot as plt
 
-
-def test_load_dataset():
-    ds = load_dataset('data/laptops_train.xml')
-    assert len(ds) > 0
-
-
-def test_w2v():
-    # Load Google's pre-trained Word2Vec model.
-    w2v = gensim.models.KeyedVectors.load_word2vec_format(
-        'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
-
-    assert len(w2v.word_vec('computer')) == 300
-    assert w2v.most_similar(positive=['woman', 'king'], negative=['man'])[0][0] == 'queen'
-
-
-class W2VMock:
-    def __init__(self):
-        self.vocab = []
-
-    def word_vector(self, word):
-        return np.zeros(300)
+from utils import W2VMock
 
 
 class ACD:
     def __init__(self, w2v):
-        if w2v:
-            self.w2v = w2v
-        else:
-            self.w2v = W2VMock()
-
+        self.w2v = w2v
         self.tokenizer = None
         self.stemmer = None
         self.mlb = None
@@ -153,11 +132,6 @@ class ACD:
         pprint(dict(zip(param_range, valid_scores)))
 
     def grid_search_acd(self):
-        print('Loading w2v...')
-
-        self.w2v = W2VMock()
-        self.w2v = gensim.models.KeyedVectors.load_word2vec_format('pretrained/GoogleNews-vectors-negative300.bin', binary=True)
-
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
 
@@ -255,6 +229,8 @@ class ACD:
         plt.show()
 
     def train_acd(self):
+        print('-- ACD:')
+
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
 
@@ -296,6 +272,10 @@ class ACD:
     def predict_many(self, sents, just_top_one=True):
         results = []
         for sent in sents:
+            if sent is None:
+                results.append((None, []))
+                continue
+
             prediction = self.predict(sent)
             if just_top_one:
                 results.append((sent, prediction[0]))
@@ -303,6 +283,7 @@ class ACD:
                 results.append((sent, prediction))
         return results
 
+    # predicts all OTEs
     def predict_ote(self, sent, step=0.31):
         sent_cats = self.predict(sent)
 
@@ -322,17 +303,38 @@ class ACD:
 
         return results
 
+    def predict_ote_for_category(self, tokens, cat):
+        per_word_cats = self.predict_many(tokens, False)
+        _, word2score = self.find_word_with_highest_score(per_word_cats, cat)
+
+        tokens = self.filter_nouns(tokens)
+        per_word_cats = self.predict_many(tokens, False)
+        ote, _ = self.find_word_with_highest_score(per_word_cats, cat)
+
+        return ote, word2score
+
+    def is_punct(self, word):
+        return word[0] in string.punctuation
+
+    def filter_nouns(self, tokens):
+        tagged = nltk.pos_tag(tokens)
+        return map(lambda t: t[0]
+                   if t[1] in ['NN', 'PRP', 'NNP', 'JJ', 'NNS'] and not self.is_punct(t[0])
+                   else None,
+                   tagged)
+
     def find_word_with_highest_score(self, per_word_cats, sent_cat):
         word2score = []
-        for word, distribution in per_word_cats:
-            max_prob = 0
+        for i, (word, distribution) in enumerate(per_word_cats):
+            found_prob = 0
             for cat, prob in distribution:
-                if cat == sent_cat and prob > max_prob:
-                    max_prob = prob
+                if cat == sent_cat:
+                    found_prob = prob
+                    break
 
-            word2score.append((word, max_prob))
+            word2score.append(((i, word), found_prob))
 
-        return sorted(word2score, key=lambda tup: -tup[1])[0][0]
+        return sorted(word2score, key=lambda tup: -tup[1])[0][0], word2score
 
 
 if __name__ == '__main__':
