@@ -2,8 +2,8 @@ import gensim
 import numpy as np
 from nltk import PorterStemmer, pprint
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.grid_search import GridSearchCV
-from sklearn.model_selection import ShuffleSplit
+
+from sklearn.model_selection import ShuffleSplit, GridSearchCV
 from sklearn.model_selection import validation_curve
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
@@ -12,7 +12,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.svm import SVC, LinearSVC
 from nltk.tokenize import WordPunctTokenizer
 
-from ds_loader import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist
+from ds_loader import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist, load_w2v
 from plotter import plot_learning_curve
 
 from matplotlib import pyplot as plt
@@ -41,11 +41,17 @@ class W2VMock:
 
 
 class ACD:
-    def __init__(self):
-        self.w2v = None
+    def __init__(self, w2v):
+        if w2v:
+            self.w2v = w2v
+        else:
+            self.w2v = W2VMock()
+
         self.tokenizer = None
         self.stemmer = None
         self.mlb = None
+        self.plot_f1s = False
+        self.clf = None
 
         self.stop_words = [
             'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
@@ -109,10 +115,26 @@ class ACD:
         assert len(predictions[0]) == len(classes)
 
         f1s = []
-        for step in np.arange(0.01, 0.5, 0.05):
+        steps = np.arange(0.01, 0.5, 0.05)
+        for step in steps:
             actuals = self.mlb.inverse_transform(y)
             f1 = get_f1(predictions, classes, actuals, step)
             f1s.append(f1['f1'])
+
+        if self.plot_f1s:
+            pprint(list(zip(steps, f1s)))
+
+            plt.figure()
+            plt_x_name = 'Step'
+            plt_y_name = 'F1'
+
+            plt.title('F1 vs Step')
+            plt.xlabel(plt_x_name)
+            plt.ylabel(plt_y_name)
+
+            plt.plot(steps, f1s)
+
+            plt.show()
 
         max_f1 = np.max(f1s)
         return max_f1
@@ -130,7 +152,7 @@ class ACD:
         print('Valid Scores:')
         pprint(dict(zip(param_range, valid_scores)))
 
-    def test_acd(self):
+    def grid_search_acd(self):
         print('Loading w2v...')
 
         self.w2v = W2VMock()
@@ -146,25 +168,15 @@ class ACD:
         ds = load_dataset('data/laptops_train.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
-        # x_train, x_test, y_train, y_test = split_ds(x, y)
 
         self.mlb = MultiLabelBinarizer()
-        # y_train = self.mlb.fit_transform(y_train)
-        # y_test = self.mlb.fit_transform(y_test)
-
-        # clf = OneVsRestClassifier(SVC(kernel='rbf', probability=True))
-        # clf = OneVsRestClassifier(RandomForestClassifier(n_estimators=10))
-        # clf = OneVsRestClassifier(GaussianNB())
-        # clf = MLPClassifier(max_iter=500,
-        #                     hidden_layer_sizes=(20,),
-        #                     activation='logistic',
-        #                     learning_rate='adaptive')
 
         tasks = [
             {
                 'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True)),
                 'name': 'SVM (метод опорных векторов)',
                 'params': {
+                    # 'estimator__C': ('C', [3.1947368421052635])
                     'estimator__C': ('C', np.linspace(0.1, 5.0, num=20))
                 }
             },
@@ -219,7 +231,7 @@ class ACD:
             grid_cv = GridSearchCV(clf, param_grid=params2values, scoring=self.scoring_fun)
             grid_cv.fit(x, y)
 
-            scores = grid_cv.grid_scores_
+            scores = grid_cv.cv_results_
             pprint(scores)
 
             plt.figure(_)
@@ -246,23 +258,88 @@ class ACD:
             plt.plot(plt_x, plt_y)
         plt.show()
 
-        return
+    def train_acd(self):
+        print('Loading tokenizer...')
+        self.tokenizer = WordPunctTokenizer()
+
+        print('Loading stemmer...')
+        self.stemmer = PorterStemmer()
+
+        print('Loading dataset...')
+        ds = load_dataset('data/laptops_train.xml')
+        fdist = category_fdist(ds)
+        x, y = get_acd_ds(ds, fdist, self.get_acd_features)
+
+        x_train, x_test, y_train, y_test = split_ds(x, y)
+
+        self.mlb = MultiLabelBinarizer()
+        clf = OneVsRestClassifier(
+            SVC(kernel='rbf', C=3.1947368421052635, probability=True))
+
+        y_train = self.mlb.fit_transform(y_train)
+        # y_test = self.mlb.fit_transform(y_test)
 
         print('Training...')
-        # self.fit_and_evaluate(clf, x_train, y_train, x_test, y_test, self.mlb)
+        clf.fit(x_train, y_train)
 
-        y = self.mlb.fit_transform(y)
-        # self.validation_curve(clf, x, y,
-        #                       param_name='max_iter',
-        #                       param_range=np.arange(200, 2000, 100, dtype=int))
-        # self.validation_curve(clf, x, y,
-        #                       param_name='estimator__C',
-        #                       param_range=np.linspace(0.1, 1.0, num=10))
-        self.validation_curve(clf, x, y,
-                              param_name='estimator__priors',
-                              param_range=[None])
+        print('Evaluating...')
+        classes = self.mlb.classes_
+        predictions = clf.predict_proba(x_test)
+        f1 = get_f1(predictions, classes, y_test, step=0.31)
+        print('F1: {}'.format(f1))
+
+        self.clf = clf
+
+    def predict(self, sent):
+        features = self.get_acd_features(sent)
+        predicted = self.clf.predict_proba([features])[0]
+        classes = self.mlb.classes_
+
+        return sorted(zip(classes, predicted), key=lambda tup: -tup[1])
+
+    def predict_many(self, sents, just_top_one=True):
+        results = []
+        for sent in sents:
+            prediction = self.predict(sent)
+            if just_top_one:
+                results.append((sent, prediction[0]))
+            else:
+                results.append((sent, prediction))
+        return results
+
+    def predict_ote(self, sent, step=0.31):
+        sent_cats = self.predict(sent)
+
+        # get list of sentence's cats
+        top_sent_cats = []
+        for cat in sent_cats:
+            if cat[1] > step:
+                top_sent_cats.append(cat[0])
+
+        tokens = self.tokenizer.tokenize(sent)
+        per_word_cats = self.predict_many(tokens, False)
+
+        results = []
+        for sent_cat in top_sent_cats:
+            ote = self.find_word_with_highest_score(per_word_cats, sent_cat)
+            results.append((sent_cat, ote))
+
+        return results
+
+    def find_word_with_highest_score(self, per_word_cats, sent_cat):
+        word2score = []
+        for word, distribution in per_word_cats:
+            max_prob = 0
+            for cat, prob in distribution:
+                if cat == sent_cat and prob > max_prob:
+                    max_prob = prob
+
+            word2score.append((word, max_prob))
+
+        return sorted(word2score, key=lambda tup: -tup[1])[0][0]
 
 
 if __name__ == '__main__':
-    acd = ACD()
-    acd.test_acd()
+    w2v = load_w2v()
+    acd = ACD(w2v)
+    acd.train_acd()
