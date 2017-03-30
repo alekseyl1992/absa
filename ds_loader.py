@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 
+import gensim
 import numpy as np
 from nltk import FreqDist
 from sklearn.model_selection import train_test_split
@@ -129,3 +130,11 @@ def get_f1(predictions, classes, actuals, step):
         'fp': fp,
         'fn': fn,
     }
+
+
+def load_w2v():
+    print('Loading w2v...')
+    w2v = gensim.models.KeyedVectors.load_word2vec_format(
+        'pretrained/GoogleNews-vectors-negative300.bin', binary=True)
+    print('Done')
+    return w2v
