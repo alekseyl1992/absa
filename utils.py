@@ -1,9 +1,11 @@
+import os
+from pprint import pprint
 import xml.etree.ElementTree as ET
 
 import gensim
 import numpy as np
 from nltk import FreqDist
-from sklearn.model_selection import train_test_split
+from nltk.parse.stanford import StanfordParser
 
 
 class Entry:
@@ -71,14 +73,32 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
     return np.array(features), np.array(labels)
 
 
-def get_pd_ds(source_ds, feature_extractor):
+def get_pd_ds(source_ds, feature_extractor, parser=None):
     features, labels = [], []
 
     ds_len = len(source_ds)
+
+    preprocessed = []
+    if parser:
+        print('Core NLP Parser preprocessing...')
+
+        texts = []
+        for source_entry in source_ds:
+            texts.append(source_entry.text)
+
+        trees = parser.raw_parse_sents(texts)
+        preprocessed = [
+            split_on_sents(tree, source_sent)
+            for tree, source_sent in zip(trees, texts)
+        ]
+
     for i, source_entry in enumerate(source_ds):
         cats_len = len(source_entry.opinions)
         for opinion in source_entry.opinions:
-            features.append(feature_extractor(source_entry.text, opinion.category, cats_len))
+            if parser:
+                features.append(feature_extractor(source_entry.text, opinion.category, cats_len, preprocessed[i]))
+            else:
+                features.append(feature_extractor(source_entry.text, opinion.category, cats_len))
             labels.append(opinion.polarity)
 
         if i % 100 == 0:
@@ -167,3 +187,51 @@ def load_w2v(use_mock=False):
 
     print('Done')
     return w2v
+
+
+def load_core_nlp_parser():
+    cwd = os.path.dirname(os.path.realpath(__file__))
+    stanford_parser_dir = os.path.join(cwd, 'core_nlp')
+    eng_model_path = os.path.join(stanford_parser_dir,
+                                  'models',
+                                  'english\\edu\\stanford\\nlp\\models\\lexparser',
+                                  'wsjRNN.ser.gz')
+
+    path_to_models_jar = os.path.join(stanford_parser_dir, 'stanford-parser-3.7.0-models.jar')
+    path_to_jar = os.path.join(stanford_parser_dir, 'stanford-parser.jar')
+
+    parser = StanfordParser(
+        model_path=eng_model_path,
+        path_to_models_jar=path_to_models_jar,
+        path_to_jar=path_to_jar)
+
+    return parser
+
+
+def split_on_sents(tree, source_sent):
+    root = list(tree)[0]
+    children = root[0]
+    sents = [
+        tokens_to_sent(sent.leaves())
+        for sent in children
+        if sent.label() == 'S'
+    ]
+
+    if len(sents) == 0:
+        return [source_sent]
+
+    return sents
+
+
+def draw(parsed):
+    for line in parsed:
+        print(line)
+        line.draw()
+
+
+def tokens_to_sent(tokens):
+    s = ' '.join(tokens)
+    s.replace(' ,', ',')
+    s.replace(' .', '.')
+
+    return s

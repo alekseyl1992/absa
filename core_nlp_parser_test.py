@@ -1,26 +1,19 @@
-import os
 from pprint import pprint
 
-from nltk.parse.stanford import StanfordParser
+from utils import load_core_nlp_parser, split_on_sents
+
+parser = load_core_nlp_parser()
 
 
-cwd = os.path.dirname(os.path.realpath(__file__))
-stanford_parser_dir = os.path.join(cwd, 'core_nlp')
-eng_model_path = os.path.join(stanford_parser_dir,
-                              'models',
-                              'english\\edu\\stanford\\nlp\\models\\lexparser',
-                              'wsjRNN.ser.gz')
+source_sents = [
+    'The screen resolution is crystal clear, the speakers are amazing, and the track pad is easy to use.',
+    'Despite the fact that there\'s no optical drive, everything is perfect.',
+    'The home page/startup is easy to navigate which is the one thing I was mainly concerned about.'
+]
 
-path_to_models_jar = os.path.join(stanford_parser_dir, 'stanford-parser-3.7.0-models.jar')
-path_to_jar = os.path.join(stanford_parser_dir, 'stanford-parser.jar')
-
-parser = StanfordParser(
-    model_path=eng_model_path,
-    path_to_models_jar=path_to_models_jar,
-    path_to_jar=path_to_jar)
-
-sent = 'W7 Pro with W8 pro upgrade is nice, but it frequently freezes for a few seconds here and there.'
-parsed = parser.raw_parse(sent)
-for line in parsed:
-    print(line)
-    line.draw()
+for source_sent in source_sents:
+    print(source_sent)
+    tree = parser.raw_parse(source_sent)
+    sents = split_on_sents(tree, source_sent)
+    pprint(sents)
+    print()

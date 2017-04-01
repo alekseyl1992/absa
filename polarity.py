@@ -7,7 +7,7 @@ from sklearn.metrics import f1_score, accuracy_score
 from sklearn.svm import SVC
 
 from acd import ACD
-from utils import load_dataset, split_ds, load_w2v, get_pd_ds
+from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser, split_on_sents
 
 
 class PD:
@@ -15,6 +15,7 @@ class PD:
         self.w2v = w2v
         self.tokenizer = None
         self.stemmer = None
+        self.parser = None
         self.clf = None
         self.acd = acd
 
@@ -108,6 +109,33 @@ class PD:
 
         return result
 
+    def text_category_prob(self, sent, category):
+        distribution = self.acd.predict(sent)
+        for cat, prob in distribution:
+            if cat == category:
+                return prob
+
+        return 0
+
+    def get_pd_features_map_core_nlp_cut_off(self, text, category, cats_len, sents):
+        if len(sents) == 1 or cats_len == 1:
+            return self.get_pd_features_ignore_category(text, category, cats_len)
+
+        max_prob = 0
+        max_prob_sent = None
+
+        for sent in sents:
+            prob = self.text_category_prob(sent, category)
+            if prob > max_prob:
+                max_prob = prob
+                max_prob_sent = sent
+
+        # TODO: maybe check max_prob > some_threshold
+        if max_prob_sent is None or max_prob < 0.5:
+            return self.get_pd_features_ignore_category(text, category, cats_len)
+
+        return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
+
     def train_pd(self):
         print('-- PD:')
         print('Loading tokenizer...')
@@ -116,9 +144,12 @@ class PD:
         print('Loading stemmer...')
         self.stemmer = PorterStemmer()
 
+        print('Loading parser...')
+        self.parser = load_core_nlp_parser()
+
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_insert_category)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         # clf = linear_model.LogisticRegression(C=1.5)
