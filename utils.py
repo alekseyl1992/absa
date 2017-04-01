@@ -53,6 +53,37 @@ def load_dataset(path):
     return dataset
 
 
+def load_dataset_2014(path):
+    # parse XML
+    tree = ET.parse(path)
+    root = tree.getroot()
+
+    dataset = []
+    for sentence in root.findall('sentence'):
+        text = sentence.find('text')
+        opinions_list = sentence.find('aspectTerms')
+
+        if not opinions_list:
+            continue
+
+        opinions = opinions_list.findall('aspectTerm')
+
+        parsed_opinions = []
+        for opinion in opinions:
+            parsed_opinion = Opinion(
+                category=opinion.attrib['term'],
+                polarity=opinion.attrib['polarity'])
+
+            parsed_opinions.append(parsed_opinion)
+
+        entry = Entry(
+            text=text.text,
+            opinions=parsed_opinions)
+        dataset.append(entry)
+
+    return dataset
+
+
 def get_acd_ds(source_ds, fdist, feature_extractor):
     features, labels = [], []
 
