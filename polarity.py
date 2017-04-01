@@ -3,7 +3,8 @@ import math
 from nltk import PorterStemmer
 from nltk.tokenize import WordPunctTokenizer
 from sklearn import linear_model
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn.svm import SVC
 
 from acd import ACD
 from utils import load_dataset, split_ds, load_w2v, get_pd_ds
@@ -30,7 +31,7 @@ class PD:
             'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
         ]
 
-    def _get_pd_features_ignore_category(self, tokens, category):
+    def _get_pd_features_ignore_category(self, tokens):
         vectors = []
 
         for token in tokens:
@@ -47,9 +48,23 @@ class PD:
 
         return result
 
-    def get_pd_features_ignore_category(self, text, category):
+    def get_pd_features_ignore_category(self, text, category, cats_len):
         tokens = self.tokenizer.tokenize(text.lower())
-        return self._get_pd_features_ignore_category(tokens, category)
+        return self._get_pd_features_ignore_category(tokens)
+
+    def get_pd_features_append_category(self, text, category, cats_len):
+        text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
+
+        category_tokens = category.lower().split('#')
+        category_vector = self._get_pd_features_ignore_category(category_tokens)
+
+        return np.concatenate([text_vector, category_vector])
+
+    def get_pd_features_insert_category(self, text, category, cats_len):
+        entity, aspect = category.lower().split('#')
+        text = text + ' ' + entity + ' ' + aspect
+
+        return self.get_pd_features_ignore_category(text, category, cats_len)
 
     def get_pd_features_map_linear_cut_off(self, text, category, cats_len):
         tokens = self.tokenizer.tokenize(text)
@@ -62,7 +77,7 @@ class PD:
                      position - distance_limit:
                      position + distance_limit + 1]
 
-        return self._get_pd_features_ignore_category(tokens, category)
+        return self._get_pd_features_ignore_category(tokens)
 
     def get_pd_features_map_linear_weighted(self, text, category, cats_len):
         tokens = self.tokenizer.tokenize(text)
@@ -103,21 +118,28 @@ class PD:
 
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_linear_weighted)
+        x, y = get_pd_ds(ds, self.get_pd_features_insert_category)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
-        clf = linear_model.LogisticRegression(C=1.5)
+        # clf = linear_model.LogisticRegression(C=1.5)
 
-        print('Training...')
-        clf.fit(x_train, y_train)
+        for c in [1, 2, 5, 7, 10, 13, 15, 17, 20, 23, 25, 30, 25, 40, 45, 50]:
+            print('SVC(C={})'.format(c))
 
-        print('Evaluating...')
-        predictions = clf.predict(x_test)
+            clf = SVC(kernel='rbf', C=c)
 
-        f1 = f1_score(y_test, predictions, average='micro')
-        print('F1: {}'.format(f1))
+            print('  Training...')
+            clf.fit(x_train, y_train)
 
-        return clf
+            print('  Evaluating...')
+            predictions = clf.predict(x_test)
+
+            f1 = f1_score(y_test, predictions, average='micro')
+            print('  F1: {}'.format(f1))
+            accuracy = accuracy_score(y_test, predictions)
+            print('  Accuracy: {}'.format(accuracy))
+
+        # return clf
 
 
 if __name__ == '__main__':
