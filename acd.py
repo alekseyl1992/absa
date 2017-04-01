@@ -239,6 +239,7 @@ class ACD:
 
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
+        # ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
 
@@ -246,7 +247,7 @@ class ACD:
 
         self.mlb = MultiLabelBinarizer()
         clf = OneVsRestClassifier(
-            SVC(kernel='rbf', C=3.1947368421052635, probability=True))
+            SVC(kernel='rbf', C=3.1947368421052635, probability=True, random_state=1))
 
         y_train = self.mlb.fit_transform(y_train)
         # y_test = self.mlb.fit_transform(y_test)

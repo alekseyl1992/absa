@@ -49,7 +49,7 @@ class PD:
 
         return result
 
-    def get_pd_features_ignore_category(self, text, category, cats_len):
+    def get_pd_features_ignore_category(self, text, category, cats_len, sents=None):
         tokens = self.tokenizer.tokenize(text.lower())
         return self._get_pd_features_ignore_category(tokens)
 
@@ -131,7 +131,7 @@ class PD:
                 max_prob_sent = sent
 
         # TODO: maybe check max_prob > some_threshold
-        if max_prob_sent is None or max_prob < 0.5:
+        if max_prob_sent is None or max_prob < 0.15:
             return self.get_pd_features_ignore_category(text, category, cats_len)
 
         return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
@@ -154,10 +154,10 @@ class PD:
 
         # clf = linear_model.LogisticRegression(C=1.5)
 
-        for c in [1, 2, 5, 7, 10, 13, 15, 17, 20, 23, 25, 30, 25, 40, 45, 50]:
+        for c in [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]:
             print('SVC(C={})'.format(c))
 
-            clf = SVC(kernel='rbf', C=c)
+            clf = SVC(kernel='rbf', C=c, random_state=1)
 
             print('  Training...')
             clf.fit(x_train, y_train)
