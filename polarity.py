@@ -137,7 +137,7 @@ class PD:
 
         return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
 
-    def train_pd(self):
+    def train_pd1(self):
         print('-- PD:')
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
@@ -177,7 +177,72 @@ class PD:
                 max_accuracy = accuracy
                 self.clf = clf
 
-        return self.clf, max_accuracy
+        return self.clf, max_accuracy, x_test, y_test
+
+    def train_pd2(self):
+        print('-- PD:')
+        print('Loading tokenizer...')
+        self.tokenizer = WordPunctTokenizer()
+
+        print('Loading stemmer...')
+        self.stemmer = PorterStemmer()
+
+        print('Loading parser...')
+        self.parser = load_core_nlp_parser()
+
+        print('Loading dataset...')
+        ds = load_dataset('data/laptops_train.xml')
+        x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
+        x_train, x_test, y_train, y_test = split_ds(x, y)
+
+        # clf = linear_model.LogisticRegression(C=1.5)
+
+        max_accuracy = 0
+
+        for c in [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]:
+            # print('SVC(C={})'.format(c))
+
+            clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
+
+            # print('  Training...')
+            clf.fit(x_train, y_train)
+
+            # print('  Evaluating...')
+            predictions = clf.predict(x_test)
+
+            f1 = f1_score(y_test, predictions, average='micro')
+            # print('  F1: {}'.format(f1))
+            accuracy = accuracy_score(y_test, predictions)
+            # print('  Accuracy: {}'.format(accuracy))
+
+            if accuracy > max_accuracy:
+                max_accuracy = accuracy
+                self.clf = clf
+
+        return self.clf, max_accuracy, x_test, y_test
+
+    def train_two(self):
+        print('PD1...')
+        pd1, acc1, x_test1, y_test1 = self.train_pd1()
+        print('PD1 Accuracy: {}'.format(acc1))
+
+        print('PD2...')
+        pd2, acc2, x_test2, y_test2 = self.train_pd2()
+        print('PD2 Accuracy: {}'.format(acc2))
+
+        predictions1 = pd1.predict_proba(x_test1)
+        predictions2 = pd2.predict_proba(x_test2)
+
+        predictions = np.average([predictions1, predictions2], axis=0)
+        classes = pd1.classes_
+
+        predictions = [
+            classes[np.argmax(prediction)]
+            for prediction in predictions
+        ]
+
+        accuracy = accuracy_score(y_test1, predictions)
+        print('Result Accuracy: {}'.format(accuracy))
 
     def predict_polarity(self, sent):
         features = self.get_pd_features_ignore_category(sent, None, None)
