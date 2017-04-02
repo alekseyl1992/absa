@@ -1,8 +1,8 @@
 from pprint import pprint
 
-from utils import load_core_nlp_parser, split_on_sents
+from utils import load_core_nlp_parser, draw
 
-parser = load_core_nlp_parser()
+parser = load_core_nlp_parser('lexparser/englishRNN.ser.gz')
 
 
 source_sents = [
@@ -14,6 +14,5 @@ source_sents = [
 for source_sent in source_sents:
     print(source_sent)
     tree = parser.raw_parse(source_sent)
-    sents = split_on_sents(tree, source_sent)
-    pprint(sents)
+    draw(tree)
     print()

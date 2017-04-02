@@ -124,18 +124,85 @@ class PD:
         max_prob = 0
         max_prob_sent = text
 
-        sents.append(text)
+        # sents.append(text)
 
-        for sent in sents:
+        for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
             if prob > max_prob:
                 max_prob = prob
                 max_prob_sent = sent
 
-        if max_prob == 0:
-            print(text, category, sents)
-
         return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
+
+    def get_pd_features_map_core_nlp_append_adjp(self, text, category, cats_len, sents):
+        text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
+
+        max_prob = 0
+        max_prob_sent = None
+        max_prob_tree = None
+
+        for sent, tree in sents:
+            prob = self.text_category_prob(sent, category)
+            if prob > max_prob:
+                max_prob = prob
+                max_prob_sent = sent
+                max_prob_tree = tree
+
+        if max_prob_tree is not None:
+            adjps = list(max_prob_tree.subtrees(lambda t: t.label() == 'ADJP'))
+            if len(adjps) == 0:
+                adjps = list(max_prob_tree.subtrees())
+
+            adjp_str = ' '.join([
+                tokens_to_sent(adjp.leaves())
+                for adjp in adjps
+            ])
+            adjp_vec = self.get_pd_features_ignore_category(adjp_str, category, cats_len)
+            return adjp_vec
+
+        return text_vector
+
+    def train_pd(self):
+        print('-- PD:')
+        print('Loading tokenizer...')
+        self.tokenizer = WordPunctTokenizer()
+
+        print('Loading stemmer...')
+        self.stemmer = PorterStemmer()
+
+        print('Loading parser...')
+        self.parser = load_core_nlp_parser()
+
+        print('Loading dataset...')
+        ds = load_dataset('data/laptops_train.xml')
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_append_adjp, self.parser, my_split_on_sents)
+        x_train, x_test, y_train, y_test = split_ds(x, y)
+
+        # clf = linear_model.LogisticRegression(C=1.5)
+
+        max_accuracy = 0
+
+        for c in [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]:
+            # print('SVC(C={})'.format(c))
+
+            clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
+
+            # print('  Training...')
+            clf.fit(x_train, y_train)
+
+            # print('  Evaluating...')
+            predictions = clf.predict(x_test)
+
+            f1 = f1_score(y_test, predictions, average='micro')
+            # print('  F1: {}'.format(f1))
+            accuracy = accuracy_score(y_test, predictions)
+            # print('  Accuracy: {}'.format(accuracy))
+
+            if accuracy > max_accuracy:
+                max_accuracy = accuracy
+                self.clf = clf
+
+        return self.clf, max_accuracy
 
     def train_pd1(self):
         print('-- PD:')
@@ -192,7 +259,7 @@ class PD:
 
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_append_adjp, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         # clf = linear_model.LogisticRegression(C=1.5)
@@ -253,16 +320,16 @@ class PD:
 def my_split_on_sents(tree, source_sent):
     root = list(tree)[0]
     children = root.subtrees(lambda t: t.label() in [
-        'ADJP',
-        'ADVP',
+        # 'ADJP',
+        # 'ADVP',
         'NP',
-        'PP',
+        # 'PP',
         'S',
         'SBAR',
         'SBARQ',
         'SINV',
         'SQ',
-        'VP',
+        # 'VP',
         # 'WHADVP',
         # 'WHNP',
         # 'WHPP',
@@ -270,14 +337,14 @@ def my_split_on_sents(tree, source_sent):
         # '*',
         # '0',
         # 'T',
-    ] and len(t.leaves()) > 3)
+    ] and len(t.leaves()) > 2)
     sents = [
-        tokens_to_sent(sent.leaves())
+        (tokens_to_sent(sent.leaves()), sent)
         for sent in children
     ]
 
     if len(sents) == 0:
-        return [source_sent]
+        return [(source_sent, root)]
 
     return sents
 

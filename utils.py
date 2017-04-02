@@ -228,13 +228,13 @@ def load_w2v(use_mock=False):
     return w2v
 
 
-def load_core_nlp_parser():
+def load_core_nlp_parser(model_path='lexparser/wsjRNN.ser.gz'):
     cwd = os.path.dirname(os.path.realpath(__file__))
     stanford_parser_dir = os.path.join(cwd, 'core_nlp')
     eng_model_path = os.path.join(stanford_parser_dir,
                                   'models',
-                                  'english\\edu\\stanford\\nlp\\models\\lexparser',
-                                  'wsjRNN.ser.gz')
+                                  'english\\edu\\stanford\\nlp\\models\\',
+                                  model_path)
 
     path_to_models_jar = os.path.join(stanford_parser_dir, 'stanford-parser-3.7.0-models.jar')
     path_to_jar = os.path.join(stanford_parser_dir, 'stanford-parser.jar')
