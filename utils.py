@@ -4,8 +4,9 @@ import xml.etree.ElementTree as ET
 
 import gensim
 import numpy as np
-from nltk import FreqDist
+from nltk import FreqDist, re
 from nltk.parse.stanford import StanfordParser
+import pickle
 
 
 class Entry:
@@ -104,22 +105,29 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
     return np.array(features), np.array(labels)
 
 
-def get_pd_ds(source_ds, feature_extractor, parser=None):
+def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None):
     features, labels = [], []
 
     ds_len = len(source_ds)
 
-    preprocessed = []
     if parser:
-        print('Core NLP Parser preprocessing...')
-
         texts = []
         for source_entry in source_ds:
             texts.append(source_entry.text)
 
-        trees = parser.raw_parse_sents(texts)
+        cwd = os.path.dirname(os.path.realpath(__file__))
+        pickle_path = os.path.join(cwd, 'data/laptops_train_trees.txt')
+        try:
+            trees = pickle.load(open(pickle_path, 'rb'))
+        except FileNotFoundError as _:
+            print('Core NLP Parser preprocessing...')
+            trees = parser.raw_parse_sents(texts)
+            pickle.dump(trees, open(pickle_path, 'wb'))
+        else:
+            print('Core NLP Parser preprocessing result pickled')
+
         preprocessed = [
-            split_on_sents(tree, source_sent)
+            splitter(tree, source_sent)
             for tree, source_sent in zip(trees, texts)
         ]
 
@@ -239,30 +247,7 @@ def load_core_nlp_parser():
     return parser
 
 
-def split_on_sents(tree, source_sent):
-    root = list(tree)[0]
-    children = root[0]
-    sents = [
-        tokens_to_sent(sent.leaves())
-        for sent in children
-        if sent.label() == 'S'
-    ]
-
-    if len(sents) == 0:
-        return [source_sent]
-
-    return sents
-
-
 def draw(parsed):
     for line in parsed:
         print(line)
         line.draw()
-
-
-def tokens_to_sent(tokens):
-    s = ' '.join(tokens)
-    s.replace(' ,', ',')
-    s.replace(' .', '.')
-
-    return s

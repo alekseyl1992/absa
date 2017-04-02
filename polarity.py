@@ -1,13 +1,13 @@
 import numpy as np
 import math
-from nltk import PorterStemmer
+from nltk import PorterStemmer, re
 from nltk.tokenize import WordPunctTokenizer
 from sklearn import linear_model
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.svm import SVC
 
 from acd import ACD
-from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser, split_on_sents
+from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
 
 
 class PD:
@@ -118,11 +118,13 @@ class PD:
         return 0
 
     def get_pd_features_map_core_nlp_cut_off(self, text, category, cats_len, sents):
-        if len(sents) == 1 or cats_len == 1:
+        if len(sents) == 1:
             return self.get_pd_features_ignore_category(text, category, cats_len)
 
         max_prob = 0
-        max_prob_sent = None
+        max_prob_sent = text
+
+        sents.append(text)
 
         for sent in sents:
             prob = self.text_category_prob(sent, category)
@@ -130,9 +132,8 @@ class PD:
                 max_prob = prob
                 max_prob_sent = sent
 
-        # TODO: maybe check max_prob > some_threshold
-        if max_prob_sent is None or max_prob < 0.15:
-            return self.get_pd_features_ignore_category(text, category, cats_len)
+        if max_prob == 0:
+            print(text, category, sents)
 
         return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
 
@@ -149,28 +150,84 @@ class PD:
 
         print('Loading dataset...')
         ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         # clf = linear_model.LogisticRegression(C=1.5)
 
+        max_accuracy = 0
+
         for c in [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]:
-            print('SVC(C={})'.format(c))
+            # print('SVC(C={})'.format(c))
 
-            clf = SVC(kernel='rbf', C=c, random_state=1)
+            clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
 
-            print('  Training...')
+            # print('  Training...')
             clf.fit(x_train, y_train)
 
-            print('  Evaluating...')
+            # print('  Evaluating...')
             predictions = clf.predict(x_test)
 
             f1 = f1_score(y_test, predictions, average='micro')
-            print('  F1: {}'.format(f1))
+            # print('  F1: {}'.format(f1))
             accuracy = accuracy_score(y_test, predictions)
-            print('  Accuracy: {}'.format(accuracy))
+            # print('  Accuracy: {}'.format(accuracy))
 
-        # return clf
+            if accuracy > max_accuracy:
+                max_accuracy = accuracy
+                self.clf = clf
+
+        return self.clf, max_accuracy
+
+    def predict_polarity(self, sent):
+        features = self.get_pd_features_ignore_category(sent, None, None)
+        polarity = self.clf.predict([features])
+        return polarity
+
+
+def my_split_on_sents(tree, source_sent):
+    root = list(tree)[0]
+    children = root.subtrees(lambda t: t.label() in [
+        'ADJP',
+        'ADVP',
+        'NP',
+        'PP',
+        'S',
+        'SBAR',
+        'SBARQ',
+        'SINV',
+        'SQ',
+        'VP',
+        # 'WHADVP',
+        # 'WHNP',
+        # 'WHPP',
+        # 'X',
+        # '*',
+        # '0',
+        # 'T',
+    ] and len(t.leaves()) > 3)
+    sents = [
+        tokens_to_sent(sent.leaves())
+        for sent in children
+    ]
+
+    if len(sents) == 0:
+        return [source_sent]
+
+    return sents
+
+
+regex = re.compile(r' ([.,\'!;])')
+
+
+def tokens_to_sent(tokens):
+    s = ' '.join(tokens)
+    s = s.replace('-LRB-', '(')
+    s = s.replace('-RRB-', ')')
+    s = s.replace(' n\'t', 'n\'t')
+    s = regex.sub(r'\1', s)
+
+    return s
 
 
 if __name__ == '__main__':
