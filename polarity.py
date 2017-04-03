@@ -59,7 +59,7 @@ class PD:
         category_tokens = category.lower().split('#')
         category_vector = self._get_pd_features_ignore_category(category_tokens)
 
-        return np.concatenate([text_vector, category_vector])
+        return np.concatenate([text_vector, category_vector * 3])
 
     def get_pd_features_insert_category(self, text, category, cats_len, sents, ote_):
         entity, aspect = category.lower().split('#')
