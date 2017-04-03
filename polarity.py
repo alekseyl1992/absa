@@ -146,7 +146,7 @@ class PD:
                 max_prob_sent = sent
 
         return np.concatenate([
-            self.get_pd_features_ignore_category(text, category, cats_len),
+            self.get_pd_features_append_category(text, category, cats_len, sents, ote),
             self.get_pd_features_ignore_category(max_prob_sent, category, cats_len),
         ])
 
@@ -192,7 +192,7 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_append_category, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_ote, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
