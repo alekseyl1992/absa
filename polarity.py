@@ -331,16 +331,16 @@ class PD:
 def my_split_on_sents(tree, source_sent):
     root = list(tree)[0]
     children = root.subtrees(lambda t: t.label() in [
-        # 'ADJP',
-        # 'ADVP',
+        'ADJP',
+        'ADVP',
         'NP',
-        # 'PP',
+        'PP',
         'S',
         'SBAR',
         'SBARQ',
         'SINV',
         'SQ',
-        # 'VP',
+        'VP',
         # 'WHADVP',
         # 'WHNP',
         # 'WHPP',
