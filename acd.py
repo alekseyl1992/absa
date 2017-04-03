@@ -139,7 +139,8 @@ class ACD:
         self.stemmer = PorterStemmer()
 
         print('Loading dataset...')
-        ds = load_dataset('data/laptops_train.xml')
+        # ds = load_dataset('data/laptops_train.xml')
+        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
 
@@ -151,14 +152,14 @@ class ACD:
                 'name': 'SVM',
                 'params': {
                     # 'estimator__kernel': ('linear', 'rbf'),
-                    'estimator__C': [3.1947368421052635]
+                    'estimator__C': np.linspace(1, 10, 20)
                 }
             },
             {
                 'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
                 'name': 'Random Forest',
                 'params': {
-                    'estimator__n_estimators': np.arange(1, 60, step=2)
+                    'estimator__n_estimators': np.arange(1, 80, step=2)
                 }
             },
             {
@@ -172,20 +173,22 @@ class ACD:
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(20,),
                                      activation='logistic',
+                                     alpha=0.001,
                                      learning_rate='adaptive'),
                 'name': 'MLP (20)',
                 'params': {
-                    'max_iter': np.arange(100, 2000, step=100)
+                    'max_iter': np.arange(300, 3300, step=200)
                 }
             },
             {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(156,),
                                      activation='logistic',
+                                     alpha=0.001,
                                      learning_rate='adaptive'),
                 'name': 'MLP (156)',
                 'params': {
-                    'max_iter': np.arange(100, 3000, step=200)
+                    'max_iter': np.arange(300, 3300, step=200)
                 }
             }
         ]
@@ -201,7 +204,7 @@ class ACD:
             params = task['params']
             print('Running {}...'.format(name))
 
-            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun)
+            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun, n_jobs=2)
             grid_cv.fit(x, y)
 
             scores = grid_cv.cv_results_
@@ -213,12 +216,12 @@ class ACD:
             plt_y_name = 'Mean F1'
 
             plt_x = list(map(
-                lambda s: s.parameters[plt_x_name],
-                scores
+                lambda s: s[plt_x_name],
+                scores['params']
             ))
             plt_y = list(map(
-                lambda s: s.mean_validation_score,
-                scores
+                lambda s: s,
+                scores['mean_test_score']
             ))
 
             plt.title(name)
