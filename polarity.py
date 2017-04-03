@@ -80,7 +80,7 @@ class PD:
 
         return self._get_pd_features_ignore_category(tokens)
 
-    def get_pd_features_map_linear_weighted(self, text, category, cats_len):
+    def get_pd_features_map_linear_weighted(self, text, category, cats_len, sents, ote):
         tokens = self.tokenizer.tokenize(text)
         tokens_len = len(tokens)
 
@@ -117,14 +117,14 @@ class PD:
 
         return 0
 
-    def get_pd_features_map_core_nlp_cut_off(self, text, category, cats_len, sents):
+    def get_pd_features_map_core_nlp_cut_off(self, text, category, cats_len, sents, ote):
         if len(sents) == 1:
             return self.get_pd_features_ignore_category(text, category, cats_len)
 
         max_prob = 0
         max_prob_sent = text
 
-        # sents.append(text)
+        sents.append((text, None))
 
         for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
@@ -141,7 +141,7 @@ class PD:
         max_prob = 0
         max_prob_sent = text
 
-        # sents.append((text, None))
+        sents.append((text, None))
 
         for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
@@ -151,7 +151,7 @@ class PD:
 
         return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
 
-    def get_pd_features_map_core_nlp_append_adjp(self, text, category, cats_len, sents):
+    def get_pd_features_map_core_nlp_append_adjp(self, text, category, cats_len, sents, ote):
         text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
 
         max_prob = 0
@@ -191,15 +191,14 @@ class PD:
         self.parser = load_core_nlp_parser()
 
         print('Loading dataset...')
-        ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_append_adjp, self.parser, my_split_on_sents)
+        # ds = load_dataset('data/laptops_train.xml')
+        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
-
-        # clf = linear_model.LogisticRegression(C=1.5)
 
         max_accuracy = 0
 
-        for c in [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]:
+        for c in np.arange(0.1, 1.1, 0.1):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
@@ -208,11 +207,8 @@ class PD:
             clf.fit(x_train, y_train)
 
             # print('  Evaluating...')
-            predictions = clf.predict(x_test)
-
-            f1 = f1_score(y_test, predictions, average='micro')
-            # print('  F1: {}'.format(f1))
-            accuracy = accuracy_score(y_test, predictions)
+            predictions = clf.predict_proba(x_test)
+            accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
             # print('  Accuracy: {}'.format(accuracy))
 
             if accuracy > max_accuracy:
@@ -352,7 +348,7 @@ def my_split_on_sents(tree, source_sent):
         # '*',
         # '0',
         # 'T',
-    ] and len(t.leaves()) > 2)
+    ] and len(t.leaves()) > 4)
     sents = [
         (tokens_to_sent(sent.leaves()), sent)
         for sent in children
