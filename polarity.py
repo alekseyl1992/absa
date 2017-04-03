@@ -53,7 +53,7 @@ class PD:
         tokens = self.tokenizer.tokenize(text.lower())
         return self._get_pd_features_ignore_category(tokens)
 
-    def get_pd_features_append_category(self, text, category, cats_len):
+    def get_pd_features_append_category(self, text, category, cats_len, *args, **kwargs):
         text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
 
         category_tokens = category.lower().split('#')
@@ -192,12 +192,12 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_insert_category, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_append_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
 
-        for c in np.arange(0.1, 1.1, 0.1):
+        for c in np.arange(0.01, 0.2, 0.02):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
@@ -234,7 +234,7 @@ class PD:
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
-        for c in np.arange(0.1, 1.1, 0.1):
+        for c in np.arange(0.05, 0.7, 0.05):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
