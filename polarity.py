@@ -49,11 +49,11 @@ class PD:
 
         return result
 
-    def get_pd_features_ignore_category(self, text, category, cats_len, *args, **kwargs):
+    def get_pd_features_ignore_category(self, text, *args, **kwargs):
         tokens = self.tokenizer.tokenize(text.lower())
         return self._get_pd_features_ignore_category(tokens)
 
-    def get_pd_features_append_category(self, text, category, cats_len, *args, **kwargs):
+    def get_pd_features_append_category(self, text, category, cats_len, sents, ote):
         text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
 
         category_tokens = category.lower().split('#')
@@ -197,7 +197,7 @@ class PD:
 
         max_accuracy = 0
 
-        for c in np.arange(0.01, 0.2, 0.02):
+        for c in np.arange(0.01, 0.25, 0.02):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
