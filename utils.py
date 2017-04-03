@@ -16,8 +16,9 @@ class Entry:
 
 
 class Opinion:
-    def __init__(self, category, polarity=None):
+    def __init__(self, category, ote, polarity):
         self.category = category
+        self.ote = ote
         self.polarity = polarity
 
 
@@ -42,7 +43,8 @@ def load_dataset(path):
                 for opinion in opinions:
                     parsed_opinion = Opinion(
                         category=opinion.attrib['category'],
-                        polarity=opinion.attrib['polarity'])
+                        polarity=opinion.attrib['polarity'],
+                        ote=opinion.attrib.get('polarity', None))
 
                     parsed_opinions.append(parsed_opinion)
 
@@ -110,6 +112,7 @@ def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None):
 
     ds_len = len(source_ds)
 
+    preprocessed = None
     if parser:
         texts = []
         for source_entry in source_ds:
@@ -134,10 +137,10 @@ def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None):
     for i, source_entry in enumerate(source_ds):
         cats_len = len(source_entry.opinions)
         for opinion in source_entry.opinions:
-            if parser:
-                features.append(feature_extractor(source_entry.text, opinion.category, cats_len, preprocessed[i]))
-            else:
-                features.append(feature_extractor(source_entry.text, opinion.category, cats_len))
+            sents = preprocessed[i] if preprocessed else []
+            ote = opinion.ote
+            features.append(feature_extractor(
+                source_entry.text, opinion.category, cats_len, sents, ote))
             labels.append(opinion.polarity)
 
         if i % 100 == 0:

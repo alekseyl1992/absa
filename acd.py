@@ -238,8 +238,8 @@ class ACD:
         self.stemmer = PorterStemmer()
 
         print('Loading dataset...')
-        ds = load_dataset('data/laptops_train.xml')
-        # ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        # ds = load_dataset('data/laptops_train.xml')
+        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
 

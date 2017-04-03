@@ -49,7 +49,7 @@ class PD:
 
         return result
 
-    def get_pd_features_ignore_category(self, text, category, cats_len, sents=None):
+    def get_pd_features_ignore_category(self, text, category, cats_len, *args, **kwargs):
         tokens = self.tokenizer.tokenize(text.lower())
         return self._get_pd_features_ignore_category(tokens)
 
@@ -129,6 +129,23 @@ class PD:
         for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
             if prob > max_prob:
+                max_prob = prob
+                max_prob_sent = sent
+
+        return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
+
+    def get_pd_features_map_core_nlp_ote(self, text, category, cats_len, sents, ote):
+        if len(sents) == 1:
+            return self.get_pd_features_ignore_category(text, category, cats_len)
+
+        max_prob = 0
+        max_prob_sent = text
+
+        # sents.append(text)
+
+        for sent, tree in sents:
+            prob = self.text_category_prob(sent, category)
+            if prob > max_prob and ote in sent:
                 max_prob = prob
                 max_prob_sent = sent
 
@@ -216,8 +233,9 @@ class PD:
         self.parser = load_core_nlp_parser()
 
         print('Loading dataset...')
-        ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser, my_split_on_sents)
+        # ds = load_dataset('data/laptops_train.xml')
+        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         # clf = linear_model.LogisticRegression(C=1.5)
@@ -258,8 +276,9 @@ class PD:
         self.parser = load_core_nlp_parser()
 
         print('Loading dataset...')
-        ds = load_dataset('data/laptops_train.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_append_adjp, self.parser, my_split_on_sents)
+        # ds = load_dataset('data/laptops_train.xml')
+        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_ote, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         # clf = linear_model.LogisticRegression(C=1.5)
