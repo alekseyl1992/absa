@@ -61,19 +61,18 @@ class PD:
 
         return np.concatenate([text_vector, category_vector])
 
-    def get_pd_features_insert_category(self, text, category, cats_len):
+    def get_pd_features_insert_category(self, text, category, cats_len, sents, ote_):
         entity, aspect = category.lower().split('#')
         text = text + ' ' + entity + ' ' + aspect
 
         return self.get_pd_features_ignore_category(text, category, cats_len)
 
-    def get_pd_features_map_linear_cut_off(self, text, category, cats_len):
+    def get_pd_features_map_linear_cut_off(self, text, category, cats_len, sents, ote_):
         tokens = self.tokenizer.tokenize(text)
-        position, ote = self.acd.predict_ote_for_category(tokens, category)
-        print((text, category, ote, position))
+        (position, ote), word2score = self.acd.predict_ote_for_category(tokens, category)
 
-        if cats_len != 1 and ote is not None and not category.endswith('GENERAL'):
-            distance_limit = int((len(tokens) / cats_len))
+        if cats_len != 1 and ote is not None:
+            distance_limit = 2
             tokens = tokens[
                      position - distance_limit:
                      position + distance_limit + 1]
@@ -135,9 +134,6 @@ class PD:
         ])
 
     def get_pd_features_map_core_nlp_ote(self, text, category, cats_len, sents, ote):
-        if len(sents) == 1:
-            return self.get_pd_features_ignore_category(text, category, cats_len)
-
         max_prob = 0
         max_prob_sent = text
 
@@ -149,7 +145,10 @@ class PD:
                 max_prob = prob
                 max_prob_sent = sent
 
-        return self.get_pd_features_ignore_category(max_prob_sent, category, cats_len)
+        return np.concatenate([
+            self.get_pd_features_ignore_category(text, category, cats_len),
+            self.get_pd_features_ignore_category(max_prob_sent, category, cats_len),
+        ])
 
     def get_pd_features_map_core_nlp_append_adjp(self, text, category, cats_len, sents, ote):
         text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
@@ -193,7 +192,7 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_insert_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
@@ -268,7 +267,7 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_cut_off, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_insert_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
@@ -324,25 +323,7 @@ class PD:
 
 def my_split_on_sents(tree, source_sent):
     root = list(tree)[0]
-    children = root.subtrees(lambda t: t.label() in [
-        'ADJP',
-        'ADVP',
-        'NP',
-        'PP',
-        'S',
-        'SBAR',
-        'SBARQ',
-        'SINV',
-        'SQ',
-        'VP',
-        # 'WHADVP',
-        # 'WHNP',
-        # 'WHPP',
-        # 'X',
-        # '*',
-        # '0',
-        # 'T',
-    ] and len(t.leaves()) > 4)
+    children = root.subtrees(lambda t: len(t.leaves()) > 4)
     sents = [
         (tokens_to_sent(sent.leaves()), sent)
         for sent in children
