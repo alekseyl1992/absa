@@ -44,7 +44,7 @@ def load_dataset(path):
                     parsed_opinion = Opinion(
                         category=opinion.attrib['category'],
                         polarity=opinion.attrib['polarity'],
-                        ote=opinion.attrib.get('polarity', None))
+                        ote=opinion.attrib.get('target', None))
 
                     parsed_opinions.append(parsed_opinion)
 
@@ -75,7 +75,8 @@ def load_dataset_2014(path):
         for opinion in opinions:
             parsed_opinion = Opinion(
                 category=opinion.attrib['term'],
-                polarity=opinion.attrib['polarity'])
+                polarity=opinion.attrib['polarity'],
+                ote=opinion.attrib['term'])
 
             parsed_opinions.append(parsed_opinion)
 

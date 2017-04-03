@@ -141,7 +141,7 @@ class PD:
         max_prob = 0
         max_prob_sent = text
 
-        # sents.append(text)
+        # sents.append((text, None))
 
         for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
@@ -251,11 +251,8 @@ class PD:
             clf.fit(x_train, y_train)
 
             # print('  Evaluating...')
-            predictions = clf.predict(x_test)
-
-            f1 = f1_score(y_test, predictions, average='micro')
-            # print('  F1: {}'.format(f1))
-            accuracy = accuracy_score(y_test, predictions)
+            predictions = clf.predict_proba(x_test)
+            accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
             # print('  Accuracy: {}'.format(accuracy))
 
             if accuracy > max_accuracy:
@@ -294,11 +291,8 @@ class PD:
             clf.fit(x_train, y_train)
 
             # print('  Evaluating...')
-            predictions = clf.predict(x_test)
-
-            f1 = f1_score(y_test, predictions, average='micro')
-            # print('  F1: {}'.format(f1))
-            accuracy = accuracy_score(y_test, predictions)
+            predictions = clf.predict_proba(x_test)
+            accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
             # print('  Accuracy: {}'.format(accuracy))
 
             if accuracy > max_accuracy:
@@ -306,6 +300,15 @@ class PD:
                 self.clf = clf
 
         return self.clf, max_accuracy, x_test, y_test
+
+    def calc_accuracy(self, y_test, predictions, classes):
+        predictions = [
+            classes[np.argmax(prediction)]
+            for prediction in predictions
+        ]
+
+        accuracy = accuracy_score(y_test, predictions)
+        return accuracy
 
     def train_two(self):
         print('PD1...')
@@ -320,14 +323,7 @@ class PD:
         predictions2 = pd2.predict_proba(x_test2)
 
         predictions = np.average([predictions1, predictions2], axis=0)
-        classes = pd1.classes_
-
-        predictions = [
-            classes[np.argmax(prediction)]
-            for prediction in predictions
-        ]
-
-        accuracy = accuracy_score(y_test1, predictions)
+        accuracy = self.calc_accuracy(y_test1, predictions, pd1.classes_)
         print('Result Accuracy: {}'.format(accuracy))
 
     def predict_polarity(self, sent):
@@ -387,4 +383,4 @@ if __name__ == '__main__':
     acd.train_acd()
 
     pd = PD(w2v, acd)
-    pd.train_pd()
+    pd.train_two()

@@ -148,47 +148,25 @@ class ACD:
 
         tasks = [
             {
-                'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True)),
-                'name': 'SVM',
-                'params': {
-                    # 'estimator__kernel': ('linear', 'rbf'),
-                    'estimator__C': np.linspace(1, 10, 20)
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
-                'name': 'Random Forest',
-                'params': {
-                    'estimator__n_estimators': np.arange(1, 80, step=2)
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(GaussianNB()),
-                'name': 'Gaussian NB',
-                'params': {
-                    'n_jobs': [1, 1]
-                }
-            },
-            {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(20,),
                                      activation='logistic',
-                                     alpha=0.001,
+                                     alpha=0.1,
                                      learning_rate='adaptive'),
                 'name': 'MLP (20)',
                 'params': {
-                    'max_iter': np.arange(300, 3300, step=200)
+                    'max_iter': np.arange(300, 2000, step=100)
                 }
             },
             {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(156,),
                                      activation='logistic',
-                                     alpha=0.001,
+                                     alpha=0.1,
                                      learning_rate='adaptive'),
                 'name': 'MLP (156)',
                 'params': {
-                    'max_iter': np.arange(300, 3300, step=200)
+                    'max_iter': np.arange(300, 2000, step=100)
                 }
             }
         ]
@@ -249,8 +227,12 @@ class ACD:
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         self.mlb = MultiLabelBinarizer()
-        clf = OneVsRestClassifier(
-            SVC(kernel='rbf', C=3.1947368421052635, probability=True, random_state=1))
+        clf = MLPClassifier(max_iter=1500,
+                            hidden_layer_sizes=(20,),
+                            activation='logistic',
+                            alpha=0.01,
+                            learning_rate='adaptive',
+                            random_state=1)
 
         y_train = self.mlb.fit_transform(y_train)
         # y_test = self.mlb.fit_transform(y_test)
