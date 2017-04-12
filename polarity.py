@@ -341,7 +341,7 @@ class PD:
                          kernel_size=(5,),
                          activation='relu',
                          input_shape=input_shape))
-        model.add(Reshape((26 * 100, 1)))
+        model.add(Reshape((26, 100)))
         model.add(GlobalMaxPooling1D())
         model.add(Dropout(0.5))
         # model.add(Flatten())
