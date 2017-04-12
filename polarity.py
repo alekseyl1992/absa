@@ -4,11 +4,19 @@ from nltk import PorterStemmer, re
 from nltk.tokenize import WordPunctTokenizer
 from sklearn import linear_model
 from sklearn.metrics import f1_score, accuracy_score
+from sklearn.preprocessing import LabelBinarizer
 from sklearn.svm import SVC
 from pprint import pprint
 from nltk.tree import ParentedTree
 from acd import ACD
 from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
+
+import keras
+from keras.datasets import mnist
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten, Conv1D, MaxPooling1D, GlobalMaxPooling1D, Reshape
+from keras.layers import Conv2D, MaxPooling2D
+from keras import backend as K
 
 
 class PD:
@@ -19,6 +27,9 @@ class PD:
         self.parser = None
         self.clf = None
         self.acd = acd
+
+        self.max_sentence_len = 30
+        self.average_vectors = True
 
         self.stop_words = [
             'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
@@ -33,6 +44,25 @@ class PD:
             'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
         ]
 
+    def reshape(self, vectors):
+        if self.average_vectors:
+            if len(vectors) > 0:
+                vectors = np.array(vectors)
+                result = np.average(vectors, axis=0)
+                result /= np.linalg.norm(result)
+            else:
+                result = np.zeros(300)
+
+            return result
+        else:
+            while len(vectors) < self.max_sentence_len:
+                vectors.append(np.zeros(300))
+
+            if len(vectors) != self.max_sentence_len:
+                vectors = vectors[:self.max_sentence_len]
+
+            return np.array(vectors)
+
     def _get_pd_features_ignore_category(self, tokens):
         vectors = []
 
@@ -41,21 +71,14 @@ class PD:
                 vector = self.w2v.word_vec(token)
                 vectors.append(vector)
 
-        if len(vectors) > 0:
-            vectors = np.array(vectors)
-            result = np.average(vectors, axis=0)
-            result /= np.linalg.norm(result)
-        else:
-            result = np.zeros(300)
-
-        return result
+        return self.reshape(vectors)
 
     def get_pd_features_ignore_category(self, text, *args, **kwargs):
         tokens = self.tokenizer.tokenize(text.lower())
         return self._get_pd_features_ignore_category(tokens)
 
     def get_pd_features_append_category(self, text, category, cats_len, sents, ote):
-        text_vector = self.get_pd_features_ignore_category(text, category, cats_len)
+        text_vector = self.get_pd_features_map_tree_distance(text, category, cats_len, sents, ote)
 
         category_tokens = category.lower().split('#')
         category_vector = self._get_pd_features_ignore_category(category_tokens)
@@ -138,8 +161,6 @@ class PD:
         max_prob = 0
         max_prob_sent = text
 
-        sents.append((text, None))
-
         for sent, tree in sents:
             prob = self.text_category_prob(sent, category)
             if prob > max_prob and ote in sent:
@@ -148,6 +169,7 @@ class PD:
 
         return np.concatenate([
             self.get_pd_features_append_category(text, category, cats_len, sents, ote),
+            self.get_pd_features_ignore_category(text, category, cats_len, sents, ote),
             self.get_pd_features_ignore_category(max_prob_sent, category, cats_len),
         ])
 
@@ -239,17 +261,12 @@ class PD:
         vectors = []
         for i, (token, weight) in enumerate(tokens):
             if token in self.w2v.vocab and token not in self.stop_words:
-                vector = self.w2v.word_vec(token) * (weight + 0.1)
+                word_vec = self.w2v.word_vec(token)
+                word_vec /= np.linalg.norm(word_vec)
+                vector = word_vec * (weight + 0.1)
                 vectors.append(vector)
 
-        if len(vectors) > 0:
-            vectors = np.array(vectors)
-            result = np.average(vectors, axis=0)
-            result /= np.linalg.norm(result)
-        else:
-            result = np.zeros(300)
-
-        return result
+        return self.reshape(vectors)
 
     def train_pd(self):
         print('-- PD:')
@@ -265,13 +282,13 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_tree_distance, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_ote, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
 
-        # for c in np.arange(0.01, 0.25, 0.02):
-        for c in np.arange(0.00001, 0.0001, 0.00002):
+        for c in np.arange(0.01, 0.25, 0.02):
+        # for c in np.arange(0.00001, 0.0001, 0.00002):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
@@ -282,13 +299,66 @@ class PD:
             # print('  Evaluating...')
             predictions = clf.predict_proba(x_test)
             accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
-            # print('  Accuracy: {}'.format(accuracy))
+            print('  {}: {}'.format(c, accuracy))
 
             if accuracy > max_accuracy:
                 max_accuracy = accuracy
                 self.clf = clf
 
         return self.clf, max_accuracy
+
+    def train_pd_keras(self):
+        self.average_vectors = False
+        print('-- PD:')
+        print('Loading tokenizer...')
+        self.tokenizer = WordPunctTokenizer()
+
+        print('Loading stemmer...')
+        self.stemmer = PorterStemmer()
+
+        print('Loading parser...')
+        self.parser = load_core_nlp_parser()
+
+        print('Loading dataset...')
+        ds = load_dataset(
+            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        # x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_tree_distance, self.parser, my_split_on_sents)
+        x_train, x_test, y_train, y_test = split_ds(x, y)
+
+        batch_size = 50
+        num_classes = 3
+        epochs = 100
+
+        lb = LabelBinarizer()
+        y_train = lb.fit_transform(y_train)
+        y_test = lb.transform(y_test)
+
+        input_shape = (self.max_sentence_len, 300)
+
+        model = Sequential()
+        model.add(Conv1D(filters=100,
+                         kernel_size=(5,),
+                         activation='relu',
+                         input_shape=input_shape))
+        model.add(Reshape((26 * 100, 1)))
+        model.add(GlobalMaxPooling1D())
+        model.add(Dropout(0.5))
+        # model.add(Flatten())
+        model.add(Dense(num_classes, activation='softmax'))
+
+        model.compile(loss=keras.losses.categorical_crossentropy,
+                      optimizer=keras.optimizers.Adadelta(),
+                      metrics=['accuracy'])
+
+        model.fit(x_train, y_train,
+                  batch_size=batch_size,
+                  epochs=epochs,
+                  verbose=1,
+                  validation_data=(x_test, y_test))
+        score = model.evaluate(x_test, y_test, verbose=0)
+        print('Test loss:', score[0])
+        print('Test accuracy:', score[1])
 
     def train_pd1(self):
         print('-- PD:')
@@ -425,8 +495,8 @@ if __name__ == '__main__':
     w2v = load_w2v(use_mock=False)
 
     acd = None
-    acd = ACD(w2v)
-    acd.train_acd()
+    # acd = ACD(w2v)
+    # acd.train_acd()
 
     pd = PD(w2v, acd)
-    pd.train_pd()
+    pd.train_pd_keras()

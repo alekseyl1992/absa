@@ -161,7 +161,7 @@ def split_ds(x, y, test_size=0.2):
     x_test = x[train_idx:]
     y_test = y[train_idx:]
 
-    return x_train, x_test, y_train, y_test
+    return np.array(x_train), np.array(x_test), y_train, y_test
 
 
 def category_fdist(ds):

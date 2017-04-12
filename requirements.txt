@@ -27,3 +27,4 @@ smart-open
 threadpool
 traitlets
 gensim
+keras
