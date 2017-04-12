@@ -5,7 +5,8 @@ from nltk.tokenize import WordPunctTokenizer
 from sklearn import linear_model
 from sklearn.metrics import f1_score, accuracy_score
 from sklearn.svm import SVC
-
+from pprint import pprint
+from nltk.tree import ParentedTree
 from acd import ACD
 from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
 
@@ -178,6 +179,78 @@ class PD:
 
         return text_vector
 
+    def get_distance(self, ptree, from_id, to_id):
+        from_location = ptree.leaf_treeposition(from_id)
+        to_location = ptree.leaf_treeposition(to_id)
+
+        matching_distance = 0
+        for i, (x, y) in enumerate(zip(from_location, to_location)):
+            if x == y:
+                matching_distance += 1
+            else:
+                break
+
+        distance = max([len(from_location), len(to_location)]) - matching_distance
+
+        # ignore pre-last tree level
+        if distance != 0:
+            distance -= 1
+
+        return distance
+
+    def get_distance_matrix(self, tree):
+        ptree = ParentedTree.fromstring(str(tree))
+
+        leaf_values = ptree.leaves()
+        distance_matrix = []
+        for leaf_id_from, leaf_from in enumerate(leaf_values):
+            distance_matrix.append([])
+            for leaf_id_to, leaf_to in enumerate(leaf_values):
+                distance = self.get_distance(ptree, leaf_id_from, leaf_id_to)
+                distance_matrix[leaf_id_from].append(distance)
+
+        return distance_matrix
+
+    def get_pd_features_map_tree_distance(self, text, category, cats_len, sents, ote):
+        if ote == 'NULL':
+            return self.get_pd_features_ignore_category(text)
+
+        ote_tokens = self.tokenizer.tokenize(ote)
+        first_ote_token = ote_tokens[0]
+
+        tree = sents[0][1]
+
+        distance_matrix = self.get_distance_matrix(tree)
+        max_distance = np.max(np.max(distance_matrix, axis=1))
+        weight_matrix = 1 - distance_matrix / max_distance
+
+        tokens = tree.leaves()
+        ote_id = 0
+        if first_ote_token in tokens:
+            ote_id = tokens.index(first_ote_token)
+        else:
+            for i, token in enumerate(tokens):
+                if first_ote_token in token:
+                    ote_id = i
+                    break
+
+        tokens = zip(tokens, weight_matrix[ote_id])
+
+        vectors = []
+        for i, (token, weight) in enumerate(tokens):
+            if token in self.w2v.vocab and token not in self.stop_words:
+                vector = self.w2v.word_vec(token) * (weight + 0.1)
+                vectors.append(vector)
+
+        if len(vectors) > 0:
+            vectors = np.array(vectors)
+            result = np.average(vectors, axis=0)
+            result /= np.linalg.norm(result)
+        else:
+            result = np.zeros(300)
+
+        return result
+
     def train_pd(self):
         print('-- PD:')
         print('Loading tokenizer...')
@@ -192,12 +265,13 @@ class PD:
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
         ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_ote, self.parser, my_split_on_sents)
+        x, y = get_pd_ds(ds, self.get_pd_features_map_tree_distance, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
         max_accuracy = 0
 
-        for c in np.arange(0.01, 0.25, 0.02):
+        # for c in np.arange(0.01, 0.25, 0.02):
+        for c in np.arange(0.00001, 0.0001, 0.00002):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
@@ -324,14 +398,13 @@ class PD:
 def my_split_on_sents(tree, source_sent):
     root = list(tree)[0]
     children = root.subtrees(lambda t: len(t.leaves()) > 4)
+
     sents = [
         (tokens_to_sent(sent.leaves()), sent)
         for sent in children
     ]
 
-    if len(sents) == 0:
-        return [(source_sent, root)]
-
+    sents = [(source_sent, root)] + sents
     return sents
 
 
@@ -349,9 +422,11 @@ def tokens_to_sent(tokens):
 
 
 if __name__ == '__main__':
-    w2v = load_w2v()
+    w2v = load_w2v(use_mock=False)
+
+    acd = None
     acd = ACD(w2v)
     acd.train_acd()
 
     pd = PD(w2v, acd)
-    pd.train_two()
+    pd.train_pd()
