@@ -1,7 +1,9 @@
 import math
 
-import keras
 import numpy as np
+np.random.seed(1337)  # for reproducibility
+
+import keras
 from keras import layers
 from keras.layers import Dense, Dropout, GlobalMaxPooling1D, Convolution1D
 from keras.layers import Input
@@ -318,7 +320,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 150
+        epochs = 30
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
