@@ -339,7 +339,7 @@ class PD:
             convs.append(pool)
 
         convs = layers.concatenate(convs)
-        dropout = Dropout(0.5)(convs)
+        dropout = Dropout(0.3)(convs)
         output = Dense(num_classes, activation='softmax')(dropout)
 
         model = Model(inputs=[input], outputs=[output])
