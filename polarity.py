@@ -6,7 +6,7 @@ from keras import layers
 from keras.layers import Dense, Dropout, GlobalMaxPooling1D, Convolution1D
 from keras.layers import Input
 from keras.models import Model
-from nltk import PorterStemmer, re
+from nltk import PorterStemmer, re, pprint
 from nltk.tokenize import WordPunctTokenizer
 from nltk.tree import ParentedTree
 from sklearn.metrics import accuracy_score
@@ -291,7 +291,7 @@ class PD:
         max_accuracy = 0
 
         for c in np.arange(0.01, 0.25, 0.02):
-        # for c in np.arange(0.00001, 0.0001, 0.00002):
+            # for c in np.arange(0.00001, 0.0001, 0.00002):
             # print('SVC(C={})'.format(c))
 
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
@@ -310,12 +310,15 @@ class PD:
 
         return self.clf, max_accuracy
 
-    def train_pd_keras(self):
-        x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
+    def train_pd_keras(self, data=None):
+        if data:
+            x_train, x_test, y_train, y_test = data
+        else:
+            x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
 
         batch_size = 50
         num_classes = 3
-        epochs = 100
+        epochs = 150
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
@@ -327,35 +330,30 @@ class PD:
 
         convs = []
         for kernel_size in [(3,), (4,), (5,)]:
-            conv = Convolution1D(filters=20,
+            conv = Convolution1D(filters=100,
                                  kernel_size=kernel_size,
                                  activation='relu')(input)
             pool = GlobalMaxPooling1D()(conv)
             convs.append(pool)
 
         convs = layers.concatenate(convs)
-        # reshape = Reshape((26, 100))(convs)
-        # max_pool = GlobalMaxPooling1D()(convs)
         dropout = Dropout(0.5)(convs)
-        # flatten = Flatten()(dropout)
         output = Dense(num_classes, activation='softmax')(dropout)
 
         model = Model(inputs=[input], outputs=[output])
-
-        print(model.summary())
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        model.fit(x_train, y_train,
-                  batch_size=batch_size,
-                  epochs=epochs,
-                  verbose=1,
-                  validation_data=(x_test, y_test))
-        score = model.evaluate(x_test, y_test, verbose=0)
-        print('Test loss:', score[0])
-        print('Test accuracy:', score[1])
+        history = model.fit(x_train, y_train,
+                            batch_size=batch_size,
+                            epochs=epochs,
+                            verbose=1,
+                            validation_data=(x_test, y_test))
+
+        val_acc = history.history['val_acc']
+        print('Max val_acc: {} (step: {})'.format(np.max(val_acc), np.argmax(val_acc)))
 
     def train_pd1(self):
         print('-- PD:')
@@ -370,7 +368,8 @@ class PD:
 
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        ds = load_dataset(
+            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
         x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
@@ -407,7 +406,8 @@ class PD:
 
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        ds = load_dataset(
+            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
         x, y = get_pd_ds(ds, self.get_pd_features_insert_category, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
 
