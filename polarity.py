@@ -332,7 +332,7 @@ class PD:
 
         convs = []
         for kernel_size in [(3,), (4,), (5,)]:
-            conv = Convolution1D(filters=100,
+            conv = Convolution1D(filters=200,
                                  kernel_size=kernel_size,
                                  activation='relu')(input)
             pool = GlobalMaxPooling1D()(conv)
@@ -355,7 +355,7 @@ class PD:
                             validation_data=(x_test, y_test))
 
         val_acc = history.history['val_acc']
-        print('Max val_acc: {} (step: {})'.format(np.max(val_acc), np.argmax(val_acc)))
+        print('Max val_acc: {} (epoch: {})'.format(np.max(val_acc), np.argmax(val_acc) + 1))
 
     def train_pd1(self):
         print('-- PD:')
