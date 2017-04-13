@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import gensim
 import numpy as np
-from nltk import FreqDist, re
+from nltk import FreqDist, re, defaultdict
 from nltk.parse.stanford import StanfordParser
 import pickle
 
@@ -211,11 +211,19 @@ def get_f1(predictions, classes, actuals, step):
     }
 
 
+class MockDict(defaultdict):
+    def __init__(self, value):
+        super().__init__(lambda: value)
+
+    def __contains__(self, value):
+        return True
+
+
 class W2VMock:
     def __init__(self):
-        self.vocab = []
+        self.vocab = MockDict(1)
 
-    def word_vector(self, word):
+    def word_vec(self, word):
         return np.zeros(300)
 
 

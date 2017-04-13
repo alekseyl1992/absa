@@ -140,7 +140,7 @@ class ACD:
 
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
+        ds = load_dataset(r'restaurants_train.xml')
         fdist = category_fdist(ds)
         x, y = get_acd_ds(ds, fdist, self.get_acd_features)
 
@@ -298,6 +298,11 @@ class ACD:
         ote, _ = self.find_word_with_highest_score(per_word_cats, cat)
 
         return ote, word2score
+
+    def get_word2score(self, tokens, cat):
+        per_word_cats = self.predict_many(tokens, False)
+        _, word2score = self.find_word_with_highest_score(per_word_cats, cat)
+        return word2score
 
     def is_punct(self, word):
         return word[0] in string.punctuation

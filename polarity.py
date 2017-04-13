@@ -1,22 +1,19 @@
-import numpy as np
 import math
-from nltk import PorterStemmer, re
-from nltk.tokenize import WordPunctTokenizer
-from sklearn import linear_model
-from sklearn.metrics import f1_score, accuracy_score
-from sklearn.preprocessing import LabelBinarizer
-from sklearn.svm import SVC
-from pprint import pprint
-from nltk.tree import ParentedTree
-from acd import ACD
-from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
 
 import keras
-from keras.datasets import mnist
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, Conv1D, MaxPooling1D, GlobalMaxPooling1D, Reshape
-from keras.layers import Conv2D, MaxPooling2D
-from keras import backend as K
+import numpy as np
+from keras import layers
+from keras.layers import Dense, Dropout, GlobalMaxPooling1D, Convolution1D
+from keras.layers import Input
+from keras.models import Model
+from nltk import PorterStemmer, re
+from nltk.tokenize import WordPunctTokenizer
+from nltk.tree import ParentedTree
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.svm import SVC
+
+from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
 
 
 class PD:
@@ -55,8 +52,14 @@ class PD:
 
             return result
         else:
+            # while len(vectors) < self.max_sentence_len:
+            #     vectors.append(np.zeros(300))
+
+            if len(vectors) == 0:
+                vectors = [np.zeros(300)]
+
             while len(vectors) < self.max_sentence_len:
-                vectors.append(np.zeros(300))
+                vectors += vectors[:self.max_sentence_len - len(vectors)]
 
             if len(vectors) != self.max_sentence_len:
                 vectors = vectors[:self.max_sentence_len]
@@ -234,41 +237,34 @@ class PD:
         return distance_matrix
 
     def get_pd_features_map_tree_distance(self, text, category, cats_len, sents, ote):
-        if ote == 'NULL':
-            return self.get_pd_features_ignore_category(text)
-
-        ote_tokens = self.tokenizer.tokenize(ote)
-        first_ote_token = ote_tokens[0]
-
         tree = sents[0][1]
 
-        distance_matrix = self.get_distance_matrix(tree)
-        max_distance = np.max(np.max(distance_matrix, axis=1))
-        weight_matrix = 1 - distance_matrix / max_distance
+        tokens = list(map(lambda token: token.lower(), tree.leaves()))
 
-        tokens = tree.leaves()
-        ote_id = 0
-        if first_ote_token in tokens:
-            ote_id = tokens.index(first_ote_token)
-        else:
-            for i, token in enumerate(tokens):
-                if first_ote_token in token:
-                    ote_id = i
-                    break
+        distance_matrix = np.array(self.get_distance_matrix(tree))
+        h = tree.height()
+        word2score = self.acd.get_word2score(tokens, category)
+        p_i = np.array([score
+                        for (_, score) in word2score])
 
-        tokens = zip(tokens, weight_matrix[ote_id])
+        p_ij = np.transpose(p_i * np.exp(-distance_matrix ** 2 / (2 * h)))
+        p_j = np.sum(p_ij, axis=0)
+        p_j = p_j / np.linalg.norm(p_j) + 0.5
+
+        tokens = zip(tokens, p_j)
 
         vectors = []
         for i, (token, weight) in enumerate(tokens):
-            if token in self.w2v.vocab and token not in self.stop_words:
+            if token in self.w2v.vocab:
                 word_vec = self.w2v.word_vec(token)
                 word_vec /= np.linalg.norm(word_vec)
-                vector = word_vec * (weight + 0.1)
+                vector = word_vec * weight
                 vectors.append(vector)
 
         return self.reshape(vectors)
 
-    def train_pd(self):
+    def prepare_data(self, feature_extractor, average_vectors=False):
+        self.average_vectors = average_vectors
         print('-- PD:')
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
@@ -281,9 +277,16 @@ class PD:
 
         print('Loading dataset...')
         # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_map_core_nlp_ote, self.parser, my_split_on_sents)
+        ds = load_dataset(r'data/restaurants_train.xml')
+        x, y = get_pd_ds(ds, feature_extractor, self.parser, my_split_on_sents)
         x_train, x_test, y_train, y_test = split_ds(x, y)
+        return x_train, x_test, y_train, y_test
+
+    def train_pd(self):
+        x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
+
+        x_train = x_train.reshape(len(x_train), self.max_sentence_len * 300)
+        x_test = x_test.reshape(len(x_test), self.max_sentence_len * 300)
 
         max_accuracy = 0
 
@@ -308,23 +311,7 @@ class PD:
         return self.clf, max_accuracy
 
     def train_pd_keras(self):
-        self.average_vectors = False
-        print('-- PD:')
-        print('Loading tokenizer...')
-        self.tokenizer = WordPunctTokenizer()
-
-        print('Loading stemmer...')
-        self.stemmer = PorterStemmer()
-
-        print('Loading parser...')
-        self.parser = load_core_nlp_parser()
-
-        print('Loading dataset...')
-        ds = load_dataset(
-            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        # x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
-        x, y = get_pd_ds(ds, self.get_pd_features_map_tree_distance, self.parser, my_split_on_sents)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
+        x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
 
         batch_size = 50
         num_classes = 3
@@ -336,16 +323,26 @@ class PD:
 
         input_shape = (self.max_sentence_len, 300)
 
-        model = Sequential()
-        model.add(Conv1D(filters=100,
-                         kernel_size=(5,),
-                         activation='relu',
-                         input_shape=input_shape))
-        model.add(Reshape((26, 100)))
-        model.add(GlobalMaxPooling1D())
-        model.add(Dropout(0.5))
-        # model.add(Flatten())
-        model.add(Dense(num_classes, activation='softmax'))
+        input = Input(input_shape)
+
+        convs = []
+        for kernel_size in [(3,), (4,), (5,)]:
+            conv = Convolution1D(filters=20,
+                                 kernel_size=kernel_size,
+                                 activation='relu')(input)
+            pool = GlobalMaxPooling1D()(conv)
+            convs.append(pool)
+
+        convs = layers.concatenate(convs)
+        # reshape = Reshape((26, 100))(convs)
+        # max_pool = GlobalMaxPooling1D()(convs)
+        dropout = Dropout(0.5)(convs)
+        # flatten = Flatten()(dropout)
+        output = Dense(num_classes, activation='softmax')(dropout)
+
+        model = Model(inputs=[input], outputs=[output])
+
+        print(model.summary())
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
@@ -492,11 +489,11 @@ def tokens_to_sent(tokens):
 
 
 if __name__ == '__main__':
-    w2v = load_w2v(use_mock=False)
+    w2v = load_w2v(use_mock=True)
 
     acd = None
     # acd = ACD(w2v)
     # acd.train_acd()
 
     pd = PD(w2v, acd)
-    pd.train_pd_keras()
+    pd.train_pd()
