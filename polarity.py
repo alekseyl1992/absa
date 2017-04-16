@@ -263,6 +263,8 @@ class PD:
                 word_vec /= np.linalg.norm(word_vec)
                 vector = word_vec * weight
                 vectors.append(vector)
+            else:
+                vectors.append(np.zeros(300))
 
         return self.reshape(vectors)
 
@@ -363,7 +365,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 100
+        epochs = 500
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
