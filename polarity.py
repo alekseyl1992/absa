@@ -8,6 +8,7 @@ from keras import layers
 from keras.layers import Dense, Dropout, GlobalMaxPooling1D, Convolution1D
 from keras.layers import Input
 from keras.models import Model
+import pickle
 from nltk import PorterStemmer, re, pprint
 from nltk.tokenize import WordPunctTokenizer
 from nltk.tree import ParentedTree
@@ -352,6 +353,14 @@ class PD:
         else:
             x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
 
+        x_train_hand = pickle.load(
+            open(r'../aueb-absa/polarity_detection/hand-features-train.pickle', 'rb'), encoding='latin1')
+        x_test_hand = pickle.load(
+            open(r'../aueb-absa/polarity_detection/hand-features-test.pickle', 'rb'), encoding='latin1')
+
+        x_train_hand = np.array(x_train_hand)
+        x_test_hand = np.array(x_test_hand)
+
         batch_size = 50
         num_classes = 3
         epochs = 100
@@ -374,19 +383,25 @@ class PD:
 
         convs = layers.concatenate(convs)
         dropout = Dropout(0.3)(convs)
-        output = Dense(num_classes, activation='softmax')(dropout)
 
-        model = Model(inputs=[input], outputs=[output])
+        pre_output = Dense(50, activation='sigmoid')(dropout)
+        input_hand = Input(shape=(59,))
+
+        merged = layers.concatenate([pre_output, input_hand])
+
+        output = Dense(num_classes, activation='softmax')(merged)
+
+        model = Model(inputs=[input, input_hand], outputs=[output])
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        history = model.fit(x_train, y_train,
+        history = model.fit([x_train, x_train_hand], y_train,
                             batch_size=batch_size,
                             epochs=epochs,
                             verbose=1,
-                            validation_data=(x_test, y_test))
+                            validation_data=([x_test, x_test_hand], y_test))
 
         val_acc = history.history['val_acc']
         print('Max val_acc: {} (epoch: {})'.format(np.max(val_acc), np.argmax(val_acc) + 1))
