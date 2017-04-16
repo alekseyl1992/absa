@@ -206,7 +206,7 @@ class PD:
 
         return text_vector
 
-    def get__tree_distance(self, ptree, from_id, to_id):
+    def get_tree_distance(self, ptree, from_id, to_id):
         from_location = ptree.leaf_treeposition(from_id)
         to_location = ptree.leaf_treeposition(to_id)
 
@@ -311,11 +311,13 @@ class PD:
         print('Loading parser...')
         self.parser = load_core_nlp_parser()
 
-        print('Loading dataset...')
-        # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'data/restaurants_train.xml')
-        x, y = get_pd_ds(ds, feature_extractor, self.parser, my_split_on_sents)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
+        print('Loading datasets...')
+        ds_train = load_dataset(r'data/restaurants_train.xml')
+        x_train, y_train = get_pd_ds(
+            ds_train, feature_extractor, self.parser, my_split_on_sents, r'data/restaurants_train.xml')
+        ds_test = load_dataset(r'data/restaurants_test.xml')
+        x_test, y_test = get_pd_ds(
+            ds_test, feature_extractor, self.parser, my_split_on_sents, r'data/restaurants_test.xml')
         return x_train, x_test, y_train, y_test
 
     def train_pd(self):
@@ -328,8 +330,6 @@ class PD:
 
         for c in np.arange(0.01, 0.25, 0.02):
             # for c in np.arange(0.00001, 0.0001, 0.00002):
-            # print('SVC(C={})'.format(c))
-
             clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
 
             # print('  Training...')
@@ -354,7 +354,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 10
+        epochs = 100
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)

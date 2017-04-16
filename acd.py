@@ -219,12 +219,12 @@ class ACD:
         self.stemmer = PorterStemmer()
 
         print('Loading dataset...')
-        # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        fdist = category_fdist(ds)
-        x, y = get_acd_ds(ds, fdist, self.get_acd_features)
-
-        x_train, x_test, y_train, y_test = split_ds(x, y)
+        ds_train = load_dataset(r'data/restaurants_train.xml')
+        fdist = category_fdist(ds_train)
+        x_train, y_train = get_acd_ds(ds_train, fdist, self.get_acd_features)
+        ds_test = load_dataset(r'data/restaurants_test.xml')
+        fdist = category_fdist(ds_test)
+        x_test, y_test = get_acd_ds(ds_test, fdist, self.get_acd_features)
 
         self.mlb = MultiLabelBinarizer()
         clf = MLPClassifier(max_iter=1500,

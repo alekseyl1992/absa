@@ -108,7 +108,7 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
     return np.array(features), np.array(labels)
 
 
-def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None):
+def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None, path=None):
     features, labels = [], []
 
     ds_len = len(source_ds)
@@ -120,7 +120,7 @@ def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None):
             texts.append(source_entry.text)
 
         cwd = os.path.dirname(os.path.realpath(__file__))
-        pickle_path = os.path.join(cwd, 'data/laptops_train_trees.txt')
+        pickle_path = os.path.join(cwd, path + '.trees.pickle')
         try:
             trees = pickle.load(open(pickle_path, 'rb'))
         except FileNotFoundError as _:
