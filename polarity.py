@@ -206,7 +206,7 @@ class PD:
 
         return text_vector
 
-    def get_distance(self, ptree, from_id, to_id):
+    def get__tree_distance(self, ptree, from_id, to_id):
         from_location = ptree.leaf_treeposition(from_id)
         to_location = ptree.leaf_treeposition(to_id)
 
@@ -225,7 +225,7 @@ class PD:
 
         return distance
 
-    def get_distance_matrix(self, tree):
+    def get_tree_distance_matrix(self, tree):
         ptree = ParentedTree.fromstring(str(tree))
 
         leaf_values = ptree.leaves()
@@ -233,7 +233,7 @@ class PD:
         for leaf_id_from, leaf_from in enumerate(leaf_values):
             distance_matrix.append([])
             for leaf_id_to, leaf_to in enumerate(leaf_values):
-                distance = self.get_distance(ptree, leaf_id_from, leaf_id_to)
+                distance = self.get_tree_distance(ptree, leaf_id_from, leaf_id_to)
                 distance_matrix[leaf_id_from].append(distance)
 
         return distance_matrix
@@ -243,8 +243,42 @@ class PD:
 
         tokens = list(map(lambda token: token.lower(), tree.leaves()))
 
-        distance_matrix = np.array(self.get_distance_matrix(tree))
+        distance_matrix = np.array(self.get_tree_distance_matrix(tree))
         h = tree.height()
+        word2score = self.acd.get_word2score(tokens, category)
+        p_i = np.array([score
+                        for (_, score) in word2score])
+
+        p_ij = np.transpose(p_i * np.exp(-distance_matrix ** 2 / (2 * h)))
+        p_j = np.sum(p_ij, axis=0)
+        p_j = p_j / np.linalg.norm(p_j) + 0.5
+
+        tokens = zip(tokens, p_j)
+
+        vectors = []
+        for i, (token, weight) in enumerate(tokens):
+            if token in self.w2v.vocab:
+                word_vec = self.w2v.word_vec(token)
+                word_vec /= np.linalg.norm(word_vec)
+                vector = word_vec * weight
+                vectors.append(vector)
+
+        return self.reshape(vectors)
+
+    def get_linear_distance_matrix(self, tokens):
+        distance_matrix = []
+        for i, token_from in enumerate(tokens):
+            distance_matrix.append([0] * len(tokens))
+            for j, token_to in enumerate(tokens):
+                distance_matrix[i][j] = math.fabs(i - j)
+
+        return distance_matrix
+
+    def get_pd_features_map_linear_distance(self, text, category, cats_len, sents, ote):
+        tokens = self.tokenizer.tokenize(text)
+
+        distance_matrix = np.array(self.get_linear_distance_matrix(tokens))
+        h = len(tokens)
         word2score = self.acd.get_word2score(tokens, category)
         p_i = np.array([score
                         for (_, score) in word2score])
@@ -320,7 +354,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 30
+        epochs = 10
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
