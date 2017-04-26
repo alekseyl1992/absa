@@ -1,26 +1,22 @@
 import string
 
-import gensim
 import nltk
 import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
 from nltk import PorterStemmer, pprint
+from nltk.tokenize import WordPunctTokenizer
 from sklearn.ensemble import RandomForestClassifier
-
 from sklearn.model_selection import ShuffleSplit, GridSearchCV
 from sklearn.model_selection import validation_curve
 from sklearn.multiclass import OneVsRestClassifier
-from sklearn.naive_bayes import MultinomialNB, GaussianNB
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.svm import SVC, LinearSVC
-from nltk.tokenize import WordPunctTokenizer
+from sklearn.svm import SVC
 
-from utils import load_dataset, split_ds, get_acd_ds, get_f1, category_fdist, load_w2v
 from plotter import plot_learning_curve
-
-from matplotlib import pyplot as plt
-
-from utils import W2VMock
+from utils import load_dataset, get_acd_ds, get_f1, category_fdist, load_w2v
 
 
 class ACD:
@@ -31,6 +27,9 @@ class ACD:
         self.mlb = None
         self.plot_f1s = False
         self.clf = None
+
+        print('Loading tokenizer...')
+        self.tokenizer = WordPunctTokenizer()
 
         self.stop_words = [
             'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
@@ -131,42 +130,85 @@ class ACD:
         print('Valid Scores:')
         pprint(dict(zip(param_range, valid_scores)))
 
-    def grid_search_acd(self):
-        print('Loading tokenizer...')
-        self.tokenizer = WordPunctTokenizer()
+    def print_scores(self, scores, param_name, param_title, value_name):
+        xs = map(lambda el: el[param_name], scores['params'])
+        ys = map(lambda score: score, scores['mean_test_score'])
 
-        print('Loading stemmer...')
-        self.stemmer = PorterStemmer()
+        df = pd.DataFrame(
+            columns=[param_title, value_name],
+            data=np.array(list(zip(xs, ys))))
 
-        print('Loading dataset...')
-        # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(r'restaurants_train.xml')
-        fdist = category_fdist(ds)
-        x, y = get_acd_ds(ds, fdist, self.get_acd_features)
+        print(df)
 
+    def print_results(self, results):
+        data = []
+        for name, scores, param_name, param_title in results:
+            max_score = np.max(scores['mean_test_score'])
+            max_score_id = np.argmax(scores['mean_test_score'])
+            data.append([name, param_title, scores['params'][max_score_id][param_name], max_score])
+
+        df = pd.DataFrame(
+            columns=[
+                'Классификатор', 'Оптимизируемый параметр',
+                'Значение параметра', 'Max Mean F1'],
+            data=np.array(data))
+
+        print(df)
+
+    def grid_search_acd(self, x, y):
         self.mlb = MultiLabelBinarizer()
 
         tasks = [
             {
+                'clf': OneVsRestClassifier(SVC(kernel='linear', probability=True, random_state=1)),
+                'name': 'SVM (linear)',
+                'params': {
+                    'estimator__C': np.linspace(1, 10, 20)
+                }
+            },
+            {
+                'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True, random_state=1)),
+                'name': 'SVM (rbf)',
+                'params': {
+                    'estimator__C': np.linspace(1, 10, 20)
+                }
+            },
+            {
+                'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10, random_state=1)),
+                'name': 'Random Forest',
+                'params': {
+                    'estimator__n_estimators': np.arange(1, 80, step=2)
+                }
+            },
+            {
+                'clf': OneVsRestClassifier(GaussianNB()),
+                'name': 'Gaussian NB',
+                'params': {
+                    'n_jobs': [1, 1]
+                }
+            },
+            {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(20,),
                                      activation='logistic',
-                                     alpha=0.1,
-                                     learning_rate='adaptive'),
+                                     alpha=0.001,
+                                     learning_rate='adaptive',
+                                     random_state=1),
                 'name': 'MLP (20)',
                 'params': {
-                    'max_iter': np.arange(300, 2000, step=100)
+                    'max_iter': np.arange(300, 3300, step=200)
                 }
             },
             {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(156,),
                                      activation='logistic',
-                                     alpha=0.1,
-                                     learning_rate='adaptive'),
+                                     alpha=0.001,
+                                     learning_rate='adaptive',
+                                     random_state=1),
                 'name': 'MLP (156)',
                 'params': {
-                    'max_iter': np.arange(300, 2000, step=100)
+                    'max_iter': np.arange(300, 3300, step=200)
                 }
             }
         ]
@@ -175,6 +217,8 @@ class ACD:
 
         import warnings
         warnings.filterwarnings("ignore")
+
+        results = []
 
         for _, task in enumerate(tasks):
             name = task['name']
@@ -186,12 +230,17 @@ class ACD:
             grid_cv.fit(x, y)
 
             scores = grid_cv.cv_results_
-            pprint(scores)
 
             plt.figure(_)
 
             plt_x_name = list(params.keys())[0]
+            param_title = plt_x_name.replace('estimator__', '')
+
             plt_y_name = 'Mean F1'
+
+            self.print_scores(scores, plt_x_name, param_title, plt_y_name)
+
+            results.append((name, scores, plt_x_name, param_title))
 
             plt_x = list(map(
                 lambda s: s[plt_x_name],
@@ -203,20 +252,18 @@ class ACD:
             ))
 
             plt.title(name)
-            plt.xlabel(plt_x_name)
+            plt.xlabel(param_title)
             plt.ylabel(plt_y_name)
 
             plt.plot(plt_x, plt_y)
+
+        print('Grid search results:')
+        self.print_results(results)
+
         plt.show()
 
     def train_acd(self):
         print('-- ACD:')
-
-        print('Loading tokenizer...')
-        self.tokenizer = WordPunctTokenizer()
-
-        print('Loading stemmer...')
-        self.stemmer = PorterStemmer()
 
         print('Loading dataset...')
         ds_train = load_dataset(r'data/restaurants_train.xml')

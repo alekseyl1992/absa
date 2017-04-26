@@ -356,9 +356,9 @@ class PD:
             x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
 
         x_train_hand = pickle.load(
-            open(r'../aueb-absa/polarity_detection/hand-features-train.pickle', 'rb'), encoding='latin1')
+            open(r'data/hand/pd/hand-features-train.pickle', 'rb'), encoding='latin1')
         x_test_hand = pickle.load(
-            open(r'../aueb-absa/polarity_detection/hand-features-test.pickle', 'rb'), encoding='latin1')
+            open(r'data/hand/pd/hand-features-test.pickle', 'rb'), encoding='latin1')
 
         x_train_hand = np.array(x_train_hand)
         x_test_hand = np.array(x_test_hand)
