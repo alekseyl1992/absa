@@ -155,7 +155,7 @@ class ACD:
 
         print(df)
 
-    def grid_search_acd(self, x, y):
+    def grid_search_acd(self, x, y, n_jobs=2):
         self.mlb = MultiLabelBinarizer()
 
         tasks = [
@@ -226,7 +226,7 @@ class ACD:
             params = task['params']
             print('Running {}...'.format(name))
 
-            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun, n_jobs=2)
+            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun, n_jobs=n_jobs)
             grid_cv.fit(x, y)
 
             scores = grid_cv.cv_results_

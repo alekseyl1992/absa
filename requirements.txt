@@ -21,3 +21,4 @@ Cython
 simplegeneric
 gensim
 keras
+jupyterthemes
