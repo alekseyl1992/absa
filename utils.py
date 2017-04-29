@@ -133,7 +133,9 @@ def iob_label(text: str, term: str, tokenizer):
     else:
         after_labels = np.zeros(len(after_tokens) - 1)
 
-    return np.concatenate([before_labels, np.array(term_labels), after_labels])
+    result = np.concatenate([before_labels, np.array(term_labels), after_labels])
+    assert len(result) == len(all_tokens)
+    return result
 
 
 def get_ote_ds(source_ds, feature_extractor, tokennizer):
