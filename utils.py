@@ -1,10 +1,9 @@
 import os
-from pprint import pprint
 import xml.etree.ElementTree as ET
 
 import gensim
 import numpy as np
-from nltk import FreqDist, re, defaultdict
+from nltk import FreqDist, defaultdict
 from nltk.parse.stanford import StanfordParser
 import pickle
 
@@ -104,6 +103,51 @@ def get_acd_ds(source_ds, fdist, feature_extractor):
             opinion_labels.append(opinion.category)
 
         labels.append(opinion_labels)
+
+    return np.array(features), np.array(labels)
+
+
+def iob_label(text: str, term: str, tokenizer):
+    all_tokens = tokenizer.tokenize(text)
+    if term == 'NULL':
+        return np.zeros(len(all_tokens))
+
+    term_begin = text.index(term)
+    term_end = term_begin + len(term)
+
+    before_tokens = tokenizer.tokenize(text[0:term_begin])
+    term_tokens = tokenizer.tokenize(text[term_begin:term_end])
+    after_tokens = tokenizer.tokenize(text[term_end:])
+
+    before_labels = np.zeros(len(before_tokens))
+
+    term_labels = []
+    for i, token in enumerate(term_tokens):
+        if i == 0:
+            term_labels.append(1)
+        else:
+            term_labels.append(2)
+
+    if len(all_tokens) == len(before_tokens + term_tokens + after_tokens):
+        after_labels = np.zeros(len(after_tokens))
+    else:
+        after_labels = np.zeros(len(after_tokens) - 1)
+
+    return np.concatenate([before_labels, np.array(term_labels), after_labels])
+
+
+def get_ote_ds(source_ds, feature_extractor, tokennizer):
+    features, labels = [], []
+
+    for source_entry in source_ds:
+        opinion_labels = []
+        features.append(feature_extractor(source_entry.text))
+        for opinion in source_entry.opinions:
+            opinion_labels.append(
+                iob_label(source_entry.text, opinion.ote, tokennizer).astype(np.int64))
+
+        intersection = np.max(opinion_labels, axis=0)
+        labels.append(intersection)
 
     return np.array(features), np.array(labels)
 

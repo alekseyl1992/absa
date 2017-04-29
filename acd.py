@@ -4,16 +4,12 @@ import nltk
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from nltk import PorterStemmer, pprint
+from nltk import pprint
 from nltk.tokenize import WordPunctTokenizer
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import ShuffleSplit, GridSearchCV
 from sklearn.model_selection import validation_curve
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.svm import SVC
 
 from plotter import plot_learning_curve
 from utils import load_dataset, get_acd_ds, get_f1, category_fdist, load_w2v
@@ -160,46 +156,6 @@ class ACD:
 
         tasks = [
             {
-                'clf': OneVsRestClassifier(SVC(kernel='linear', probability=True, random_state=1)),
-                'name': 'SVM (linear)',
-                'params': {
-                    'estimator__C': np.linspace(1, 10, 20)
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True, random_state=1)),
-                'name': 'SVM (rbf)',
-                'params': {
-                    'estimator__C': np.linspace(1, 10, 20)
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10, random_state=1)),
-                'name': 'Random Forest',
-                'params': {
-                    'estimator__n_estimators': np.arange(1, 80, step=2)
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(GaussianNB()),
-                'name': 'Gaussian NB',
-                'params': {
-                    'n_jobs': [1, 1]
-                }
-            },
-            {
-                'clf': MLPClassifier(max_iter=500,
-                                     hidden_layer_sizes=(20,),
-                                     activation='logistic',
-                                     alpha=0.001,
-                                     learning_rate='adaptive',
-                                     random_state=1),
-                'name': 'MLP (20)',
-                'params': {
-                    'max_iter': np.arange(300, 3300, step=200)
-                }
-            },
-            {
                 'clf': MLPClassifier(max_iter=500,
                                      hidden_layer_sizes=(156,),
                                      activation='logistic',
@@ -208,7 +164,7 @@ class ACD:
                                      random_state=1),
                 'name': 'MLP (156)',
                 'params': {
-                    'max_iter': np.arange(300, 3300, step=200)
+                    'max_iter': np.arange(50, 1200, step=100)
                 }
             }
         ]
