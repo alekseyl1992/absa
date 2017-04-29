@@ -1,12 +1,12 @@
-import nltk
-from nltk import WordPunctTokenizer
-
 from utils import load_w2v, get_ote_ds, load_dataset
 
+import nltk
 import numpy as np
-from pystruct.models import ChainCRF
+import pandas as pd
+from matplotlib import pyplot as plt
 from pystruct.learners import FrankWolfeSSVM
-from sklearn.metrics import accuracy_score
+from pystruct.models import ChainCRF
+from sklearn.model_selection import GridSearchCV
 
 
 class Tokenizer:
@@ -45,7 +45,7 @@ class OTE:
 
     def get_ote_features(self, text):
         tokens = self.tokenizer.tokenize(text.lower())
-        return np.array(map(self.w2v_safe, tokens))
+        return np.array(list(map(self.w2v_safe, tokens)))
 
     def get_ote_features_window(self, text):
         tokens = self.tokenizer.tokenize(text.lower())
@@ -122,13 +122,13 @@ class OTE:
 
         print('Loading dataset...')
         ds_train = load_dataset(r'data/restaurants_train.xml')
-        x_train, y_train = get_ote_ds(ds_train, self.get_ote_features_window, self.tokenizer)
+        x_train, y_train = get_ote_ds(ds_train, self.get_ote_features, self.tokenizer)
         ds_test = load_dataset(r'data/restaurants_test.xml')
-        x_test, y_test = get_ote_ds(ds_test, self.get_ote_features_window, self.tokenizer)
+        x_test, y_test = get_ote_ds(ds_test, self.get_ote_features, self.tokenizer)
 
         print('Fitting...')
         model = ChainCRF()
-        ssvm = FrankWolfeSSVM(model=model, C=.05, max_iter=10)
+        ssvm = FrankWolfeSSVM(model=model, C=.1, max_iter=10)
         ssvm.fit(x_train, y_train)
 
         predicted = ssvm.predict(x_test)
@@ -136,8 +136,66 @@ class OTE:
 
         print('{}'.format(f1))
 
+    def scoring_fun(self, clf, x, y):
+        predicted = clf.predict(x)
+        f1 = self.calc_f1(y, predicted)
+        return f1[0]
+
+    def print_scores(self, scores, param_name, param_title, value_name):
+        xs = map(lambda el: el[param_name], scores['params'])
+        ys = map(lambda score: score, scores['mean_test_score'])
+
+        df = pd.DataFrame(
+            columns=[param_title, value_name],
+            data=np.array(list(zip(xs, ys))))
+
+        print(df)
+
+    def grid_search(self):
+        print('Loading dataset...')
+        ds_train = load_dataset(r'data/restaurants_train.xml')
+        x, y = get_ote_ds(ds_train, self.get_ote_features_window, self.tokenizer)
+
+        print('Fitting...')
+        model = ChainCRF()
+        ssvm = FrankWolfeSSVM(model=model, C=.1, max_iter=10)
+
+        params = {
+            'C': np.linspace(0.005, 0.1, 10) + np.linspace(0.15, 1, 10)
+        }
+
+        grid_cv = GridSearchCV(ssvm, param_grid=params, scoring=self.scoring_fun)
+        grid_cv.fit(x, y)
+
+        scores = grid_cv.cv_results_
+
+        plt.figure()
+
+        plt_x_name = list(params.keys())[0]
+        param_title = plt_x_name.replace('estimator__', '')
+
+        plt_y_name = 'Mean F1'
+
+        self.print_scores(scores, plt_x_name, param_title, plt_y_name)
+
+        plt_x = list(map(
+            lambda s: s[plt_x_name],
+            scores['params']
+        ))
+        plt_y = list(map(
+            lambda s: s,
+            scores['mean_test_score']
+        ))
+
+        plt.title('SVM CRF')
+        plt.xlabel(param_title)
+        plt.ylabel(plt_y_name)
+
+        plt.plot(plt_x, plt_y)
+        plt.show()
+
 
 if __name__ == '__main__':
     w2v = load_w2v(use_mock=False)
     ote = OTE(w2v)
-    ote.train()
+    ote.grid_search()
