@@ -21,7 +21,7 @@ class Opinion:
         self.polarity = polarity
 
 
-def load_dataset(path):
+def load_dataset(path, skip_empty=True, skip_out_of_scope=False):
     # parse XML
     tree = ET.parse(path)
     root = tree.getroot()
@@ -30,10 +30,13 @@ def load_dataset(path):
     for review in root.findall('Review'):
         for sentences in review.findall('sentences'):
             for sentence in sentences.findall('sentence'):
+                if 'OutOfScope' in sentence.attrib and skip_out_of_scope:
+                    continue
+
                 text = sentence.find('text')
                 opinions_list = sentence.find('Opinions')
 
-                if not opinions_list:
+                if not opinions_list and skip_empty:
                     continue
 
                 opinions = opinions_list.findall('Opinion')

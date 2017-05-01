@@ -1,5 +1,6 @@
 import string
 
+import pickle
 import nltk
 import numpy as np
 import pandas as pd
@@ -8,8 +9,10 @@ from nltk import pprint
 from nltk.tokenize import WordPunctTokenizer
 from sklearn.model_selection import ShuffleSplit, GridSearchCV
 from sklearn.model_selection import validation_curve
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.svm import SVC
 
 from plotter import plot_learning_curve
 from utils import load_dataset, get_acd_ds, get_f1, category_fdist, load_w2v
@@ -96,9 +99,14 @@ class ACD:
             f1s.append(f1['f1'])
 
         if self.plot_f1s:
-            pprint(list(zip(steps, f1s)))
+            df = pd.DataFrame(
+                columns=['Step', 'F1'],
+                data=np.array(list(zip(steps, f1s))))
+
+            print(df)
 
             plt.figure()
+            plt.grid(True)
             plt_x_name = 'Step'
             plt_y_name = 'F1'
 
@@ -225,29 +233,32 @@ class ACD:
         ds_train = load_dataset(r'data/restaurants_train.xml')
         fdist = category_fdist(ds_train)
         x_train, y_train = get_acd_ds(ds_train, fdist, self.get_acd_features)
+        x_train_hand = pickle.load(
+            open(r'data/hand/acd/acd-rest-train.pickle', 'rb'), encoding='latin1')
+
         ds_test = load_dataset(r'data/restaurants_test.xml')
         fdist = category_fdist(ds_test)
         x_test, y_test = get_acd_ds(ds_test, fdist, self.get_acd_features)
+        x_test_hand = pickle.load(
+            open(r'data/hand/acd/acd-rest-test.pickle', 'rb'), encoding='latin1')
+
+        merged_train = np.concatenate([x_train, x_train_hand], axis=1)
+        merged_test = np.concatenate([x_test, x_test_hand], axis=1)
 
         self.mlb = MultiLabelBinarizer()
-        clf = MLPClassifier(max_iter=1500,
-                            hidden_layer_sizes=(20,),
-                            activation='logistic',
-                            alpha=0.01,
-                            learning_rate='adaptive',
-                            random_state=1)
+        clf = OneVsRestClassifier(
+            SVC(kernel='rbf', C=80, probability=True, random_state=1))
 
         y_train = self.mlb.fit_transform(y_train)
-        # y_test = self.mlb.fit_transform(y_test)
+        y_test = self.mlb.fit_transform(y_test)
 
         print('Training...')
         clf.fit(x_train, y_train)
 
         print('Evaluating...')
-        classes = self.mlb.classes_
-        predictions = clf.predict_proba(x_test)
-        f1 = get_f1(predictions, classes, y_test, step=0.31)
-        print('F1: {}'.format(f1))
+        self.plot_f1s = False
+        score = self.scoring_fun(clf, x_test, y_test)
+        print('F1: {}'.format(score))
 
         self.clf = clf
 
@@ -332,6 +343,6 @@ class ACD:
 
 
 if __name__ == '__main__':
-    w2v = load_w2v()
+    w2v = load_w2v(True)
     acd = ACD(w2v)
     acd.train_acd()
