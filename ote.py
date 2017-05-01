@@ -4,7 +4,7 @@ import nltk
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from pystruct.learners import FrankWolfeSSVM
+from pystruct.learners import FrankWolfeSSVM, NSlackSSVM
 from pystruct.models import ChainCRF
 from sklearn.model_selection import GridSearchCV
 
@@ -151,21 +151,23 @@ class OTE:
 
         print(df)
 
-    def grid_search(self):
+    def grid_search(self, extractor, interval):
         print('Loading dataset...')
         ds_train = load_dataset(r'data/restaurants_train.xml')
-        x, y = get_ote_ds(ds_train, self.get_ote_features_window, self.tokenizer)
+        x_train, y_train = get_ote_ds(ds_train, self.get_ote_features, self.tokenizer)
+        ds_test = load_dataset(r'data/restaurants_test.xml')
+        x_test, y_test = get_ote_ds(ds_test, self.get_ote_features, self.tokenizer)
 
         print('Fitting...')
         model = ChainCRF()
         ssvm = FrankWolfeSSVM(model=model, C=.1, max_iter=10)
 
         params = {
-            'C': np.linspace(0.005, 0.1, 10) + np.linspace(0.15, 1, 10)
+            'C': interval
         }
 
-        grid_cv = GridSearchCV(ssvm, param_grid=params, scoring=self.scoring_fun)
-        grid_cv.fit(x, y)
+        grid_cv = GridSearchCV(ssvm, param_grid=params, scoring=self.scoring_fun, verbose=1)
+        grid_cv.fit(x_train, y_train)
 
         scores = grid_cv.cv_results_
 
@@ -177,6 +179,9 @@ class OTE:
         plt_y_name = 'Mean F1'
 
         self.print_scores(scores, plt_x_name, param_title, plt_y_name)
+
+        score = grid_cv.score(x_test, y_test)
+        print('Test score: {}'.format(score))
 
         plt_x = list(map(
             lambda s: s[plt_x_name],
@@ -198,4 +203,6 @@ class OTE:
 if __name__ == '__main__':
     w2v = load_w2v(use_mock=False)
     ote = OTE(w2v)
-    ote.grid_search()
+    ote.grid_search(ote.get_ote_features, np.concatenate([
+        np.linspace(0.005, 0.1, 10),
+        np.linspace(0.15, 1.5, 10)]))
