@@ -515,8 +515,6 @@ class PD:
         x_test_hand = pickle.load(
             open(r'data/hand/pd/hand-features-test.pickle', 'rb'), encoding='latin1')
 
-        np.random.shuffle(x_test_hand)
-
         baseline_data = self.prepare_data(self.get_pd_features_ignore_category, True)
         append_data = self.prepare_data(self.get_pd_features_append_category, True)
         insert_data = self.prepare_data(self.get_pd_features_insert_category, True)
@@ -530,11 +528,68 @@ class PD:
         return append_data, append_data_merged, baseline_data,\
                baseline_data_merged, cutoff_data, cutoff_data_merged, insert_data, insert_data_merged
 
-    def train_pd_keras(self, data=None):
+    def train_pd_keras_w2v(self, extractor=None, data=None):
+        if extractor is None:
+            extractor = self.get_pd_features_map_tree_distance
+
         if data:
             x_train, x_test, y_train, y_test = data
         else:
-            x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
+            x_train, x_test, y_train, y_test = self.prepare_data(extractor, False)
+
+        batch_size = 50
+        num_classes = 3
+        epochs = 10
+
+        lb = LabelBinarizer()
+        y_train = lb.fit_transform(y_train)
+        y_test = lb.transform(y_test)
+
+        input_shape = (self.max_sentence_len, 300)
+
+        input = Input(input_shape)
+
+        convs = []
+        for kernel_size in [(3,), (4,), (5,)]:
+            conv = Convolution1D(filters=200,
+                                 kernel_size=kernel_size,
+                                 activation='relu')(input)
+            pool = GlobalMaxPooling1D()(conv)
+            convs.append(pool)
+
+        convs = layers.concatenate(convs)
+        dropout = Dropout(0.3)(convs)
+
+        output = Dense(num_classes, activation='softmax')(dropout)
+
+        model = Model(inputs=[input], outputs=[output])
+
+        model.compile(loss=keras.losses.categorical_crossentropy,
+                      optimizer=keras.optimizers.Adadelta(),
+                      metrics=['accuracy'])
+
+        history = model.fit(x_train, y_train,
+                            batch_size=batch_size,
+                            epochs=epochs,
+                            verbose=1,
+                            validation_data=(x_test, y_test))
+
+        val_acc = history.history['val_acc']
+
+        max_val_acc = np.max(val_acc)
+        max_val_acc_epoch = np.argmax(val_acc) + 1
+        print('Max val_acc: {} (epoch: {})'.format(max_val_acc, max_val_acc_epoch))
+
+        return max_val_acc
+
+    def train_pd_keras_both(self, extractor=None, data=None):
+        if extractor is None:
+            extractor = self.get_pd_features_map_tree_distance
+
+        if data:
+            x_train, x_test, y_train, y_test = data
+        else:
+            x_train, x_test, y_train, y_test = self.prepare_data(extractor, False)
 
         x_train_hand = pickle.load(
             open(r'data/hand/pd/hand-features-train.pickle', 'rb'), encoding='latin1')
@@ -546,7 +601,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 500
+        epochs = 50
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
@@ -587,7 +642,50 @@ class PD:
                             validation_data=([x_test, x_test_hand], y_test))
 
         val_acc = history.history['val_acc']
-        print('Max val_acc: {} (epoch: {})'.format(np.max(val_acc), np.argmax(val_acc) + 1))
+
+        max_val_acc = np.max(val_acc)
+        max_val_acc_epoch = np.argmax(val_acc) + 1
+        print('Max val_acc: {} (epoch: {})'.format(max_val_acc, max_val_acc_epoch))
+
+        return max_val_acc
+
+    def grid_search_pd_keras(self):
+        tasks = [
+            {
+                'name': 'CNN (baseline, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_ignore_category
+            },
+            {
+                'name': 'CNN (linear, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_map_linear_distance
+            },
+            {
+                'name': 'CNN (tree, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_map_tree_distance
+            },
+            {
+                'name': 'CNN (tree, both)',
+                'fit': self.train_pd_keras_both,
+                'extractor': self.get_pd_features_map_tree_distance
+            },
+        ]
+
+        results = []
+        for _, task in enumerate(tasks):
+            name = task['name']
+            fit = task['fit']
+            extractor = task['extractor']
+
+            print('Running {}...'.format(name))
+            score = fit(extractor=extractor)
+
+            results.append((name, score))
+
+        df = pd.DataFrame(columns=['Модель', 'Accuracy'], data=results)
+        print(df)
 
     def calc_accuracy(self, y_test, predictions, classes):
         predictions = [
