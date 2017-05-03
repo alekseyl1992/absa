@@ -1,6 +1,10 @@
 import math
 
 import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
+from sklearn.model_selection import GridSearchCV
+
 np.random.seed(1337)  # for reproducibility
 
 import keras
@@ -84,7 +88,7 @@ class PD:
         return self._get_pd_features_ignore_category(tokens)
 
     def get_pd_features_append_category(self, text, category, cats_len, sents, ote):
-        text_vector = self.get_pd_features_map_tree_distance(text, category, cats_len, sents, ote)
+        text_vector = self.get_pd_features_ignore_category(text, category, cats_len, sents, ote)
 
         category_tokens = category.lower().split('#')
         category_vector = self._get_pd_features_ignore_category(category_tokens)
@@ -349,6 +353,183 @@ class PD:
 
         return self.clf, max_accuracy
 
+    def print_scores(self, scores, param_name, param_title, value_name):
+        xs = map(lambda el: el[param_name], scores['params'])
+        ys = map(lambda score: score, scores['mean_test_score'])
+
+        df = pd.DataFrame(
+            columns=[param_title, value_name],
+            data=np.array(list(zip(xs, ys))))
+
+        print(df)
+
+    def print_results(self, results):
+        data = []
+        for name, scores, test_score, param_name, param_title in results:
+            max_score = np.max(scores['mean_test_score'])
+            max_score_id = np.argmax(scores['mean_test_score'])
+            data.append([name, scores['params'][max_score_id][param_name],
+                         max_score, test_score])
+
+        df = pd.DataFrame(
+            columns=[
+                'Классификатор', 'Значение параметра', 'CV Acc', 'Test Acc'],
+            data=np.array(data))
+
+        print(df)
+
+    def merge_features(self, dataset, additional_train, additional_test):
+        return (
+            np.concatenate([dataset[0], additional_train], axis=1),
+            np.concatenate([dataset[1], additional_test], axis=1),
+            dataset[2],
+            dataset[3]
+        )
+
+    def grid_search_pd(self, datasets, n_jobs=1):
+        append_data, append_data_merged, baseline_data, baseline_data_merged,\
+            cutoff_data, cutoff_data_merged, insert_data, insert_data_merged = datasets
+
+        tasks = [
+            # w2v only
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (baseline, w2v)',
+                'dataset': baseline_data,
+                'params': {
+                    'C': np.linspace(0.01, 1, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (append, w2v)',
+                'dataset': append_data,
+                'params': {
+                    'C': np.linspace(0.01, 1, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (insert, w2v)',
+                'dataset': insert_data,
+                'params': {
+                    'C': np.linspace(0.01, 1, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (cutoff, w2v)',
+                'dataset': cutoff_data,
+                'params': {
+                    'C': np.linspace(0.01, 1, 20)
+                }
+            },
+
+            # both
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (baseline, both)',
+                'dataset': baseline_data_merged,
+                'params': {
+                    'C': np.linspace(0.1, 2, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (append, both)',
+                'dataset': append_data_merged,
+                'params': {
+                    'C': np.linspace(0.1, 2, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (insert, both)',
+                'dataset': insert_data_merged,
+                'params': {
+                    'C': np.linspace(0.1, 2, 20)
+                }
+            },
+            {
+                'clf': SVC(kernel='linear', C=0.1, random_state=1),
+                'name': 'SVM (cutoff, both)',
+                'dataset': cutoff_data_merged,
+                'params': {
+                    'C': np.linspace(0.1, 2, 20)
+                }
+            },
+        ]
+
+        results = []
+
+        for _, task in enumerate(tasks):
+            x_train, x_test, y_train, y_test = task['dataset']
+
+            name = task['name']
+            clf = task['clf']
+            params = task['params']
+            print('Running {}...'.format(name))
+
+            grid_cv = GridSearchCV(clf, param_grid=params, n_jobs=n_jobs)
+            grid_cv.fit(x_train, y_train)
+
+            scores = grid_cv.cv_results_
+
+            plt.figure(_)
+            plt.grid(True)
+
+            plt_x_name = list(params.keys())[0]
+            param_title = plt_x_name.replace('estimator__', '')
+
+            plt_y_name = 'Mean Accuracy'
+
+            self.print_scores(scores, plt_x_name, param_title, plt_y_name)
+
+            test_score = grid_cv.score(x_test, y_test)
+
+            results.append((name, scores, test_score, plt_x_name, param_title))
+
+            plt_x = list(map(
+                lambda s: s[plt_x_name],
+                scores['params']
+            ))
+            plt_y = list(map(
+                lambda s: s,
+                scores['mean_test_score']
+            ))
+
+            plt.title(name)
+            plt.xlabel(param_title)
+            plt.ylabel(plt_y_name)
+
+            plt.plot(plt_x, plt_y)
+
+        print('Grid search results:')
+        self.print_results(results)
+
+        plt.show()
+
+    def load_grid_datasets(self):
+        x_train_hand = pickle.load(
+            open(r'data/hand/pd/hand-features-train.pickle', 'rb'), encoding='latin1')
+        x_test_hand = pickle.load(
+            open(r'data/hand/pd/hand-features-test.pickle', 'rb'), encoding='latin1')
+
+        np.random.shuffle(x_test_hand)
+
+        baseline_data = self.prepare_data(self.get_pd_features_ignore_category, True)
+        append_data = self.prepare_data(self.get_pd_features_append_category, True)
+        insert_data = self.prepare_data(self.get_pd_features_insert_category, True)
+        cutoff_data = self.prepare_data(self.get_pd_features_map_linear_cut_off, True)
+
+        baseline_data_merged = self.merge_features(baseline_data, x_train_hand, x_test_hand)
+        append_data_merged = self.merge_features(append_data, x_train_hand, x_test_hand)
+        insert_data_merged = self.merge_features(insert_data, x_train_hand, x_test_hand)
+        cutoff_data_merged = self.merge_features(cutoff_data, x_train_hand, x_test_hand)
+
+        return append_data, append_data_merged, baseline_data,\
+               baseline_data_merged, cutoff_data, cutoff_data_merged, insert_data, insert_data_merged
+
     def train_pd_keras(self, data=None):
         if data:
             x_train, x_test, y_train, y_test = data
@@ -408,82 +589,6 @@ class PD:
         val_acc = history.history['val_acc']
         print('Max val_acc: {} (epoch: {})'.format(np.max(val_acc), np.argmax(val_acc) + 1))
 
-    def train_pd1(self):
-        print('-- PD:')
-        print('Loading tokenizer...')
-        self.tokenizer = WordPunctTokenizer()
-
-        print('Loading stemmer...')
-        self.stemmer = PorterStemmer()
-
-        print('Loading parser...')
-        self.parser = load_core_nlp_parser()
-
-        print('Loading dataset...')
-        # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(
-            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_ignore_category, self.parser, my_split_on_sents)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
-
-        max_accuracy = 0
-        for c in np.arange(0.05, 0.7, 0.05):
-            # print('SVC(C={})'.format(c))
-
-            clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
-
-            # print('  Training...')
-            clf.fit(x_train, y_train)
-
-            # print('  Evaluating...')
-            predictions = clf.predict_proba(x_test)
-            accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
-            # print('  Accuracy: {}'.format(accuracy))
-
-            if accuracy > max_accuracy:
-                max_accuracy = accuracy
-                self.clf = clf
-
-        return self.clf, max_accuracy, x_test, y_test
-
-    def train_pd2(self):
-        print('-- PD:')
-        print('Loading tokenizer...')
-        self.tokenizer = WordPunctTokenizer()
-
-        print('Loading stemmer...')
-        self.stemmer = PorterStemmer()
-
-        print('Loading parser...')
-        self.parser = load_core_nlp_parser()
-
-        print('Loading dataset...')
-        # ds = load_dataset('data/laptops_train.xml')
-        ds = load_dataset(
-            r'C:\Projects\ML\aueb-absa\polarity_detection\restaurants\ABSA16_Restaurants_Train_SB1_v2.xml')
-        x, y = get_pd_ds(ds, self.get_pd_features_insert_category, self.parser, my_split_on_sents)
-        x_train, x_test, y_train, y_test = split_ds(x, y)
-
-        max_accuracy = 0
-        for c in np.arange(0.1, 1.1, 0.1):
-            # print('SVC(C={})'.format(c))
-
-            clf = SVC(kernel='rbf', C=c, random_state=1, probability=True)
-
-            # print('  Training...')
-            clf.fit(x_train, y_train)
-
-            # print('  Evaluating...')
-            predictions = clf.predict_proba(x_test)
-            accuracy = self.calc_accuracy(y_test, predictions, clf.classes_)
-            # print('  Accuracy: {}'.format(accuracy))
-
-            if accuracy > max_accuracy:
-                max_accuracy = accuracy
-                self.clf = clf
-
-        return self.clf, max_accuracy, x_test, y_test
-
     def calc_accuracy(self, y_test, predictions, classes):
         predictions = [
             classes[np.argmax(prediction)]
@@ -492,22 +597,6 @@ class PD:
 
         accuracy = accuracy_score(y_test, predictions)
         return accuracy
-
-    def train_two(self):
-        print('PD1...')
-        pd1, acc1, x_test1, y_test1 = self.train_pd1()
-        print('PD1 Accuracy: {}'.format(acc1))
-
-        print('PD2...')
-        pd2, acc2, x_test2, y_test2 = self.train_pd2()
-        print('PD2 Accuracy: {}'.format(acc2))
-
-        predictions1 = pd1.predict_proba(x_test1)
-        predictions2 = pd2.predict_proba(x_test2)
-
-        predictions = np.average([predictions1, predictions2], axis=0)
-        accuracy = self.calc_accuracy(y_test1, predictions, pd1.classes_)
-        print('Result Accuracy: {}'.format(accuracy))
 
     def predict_polarity(self, sent):
         features = self.get_pd_features_ignore_category(sent, None, None)
@@ -548,5 +637,6 @@ if __name__ == '__main__':
     # acd = ACD(w2v)
     # acd.train_acd()
 
-    pd = PD(w2v, acd)
-    pd.train_pd()
+    pd_ = PD(w2v, acd)
+    datasets = pd_.load_grid_datasets()
+    pd_.grid_search_pd(datasets)
