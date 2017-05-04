@@ -3,7 +3,8 @@ import math
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.utils import shuffle
 
 np.random.seed(1337)  # for reproducibility
 
@@ -386,6 +387,14 @@ class PD:
             dataset[3]
         )
 
+    def resplit(self, x_train, x_test, y_train, y_test):
+        x = np.concatenate([x_train, x_test])
+        y = np.concatenate([y_train, y_test])
+
+        x, y = shuffle(x, y, random_state=1)
+
+        return train_test_split(x, y)
+
     def grid_search_pd(self, datasets, n_jobs=1):
         append_data, append_data_merged, baseline_data, baseline_data_merged,\
             cutoff_data, cutoff_data_merged, insert_data, insert_data_merged = datasets
@@ -463,7 +472,7 @@ class PD:
         results = []
 
         for _, task in enumerate(tasks):
-            x_train, x_test, y_train, y_test = task['dataset']
+            x_train, x_test, y_train, y_test = self.resplit(*task['dataset'])
 
             name = task['name']
             clf = task['clf']
@@ -533,9 +542,9 @@ class PD:
             extractor = self.get_pd_features_map_tree_distance
 
         if data:
-            x_train, x_test, y_train, y_test = data
+            x_train, x_test, y_train, y_test = self.resplit(*data)
         else:
-            x_train, x_test, y_train, y_test = self.prepare_data(extractor, False)
+            x_train, x_test, y_train, y_test = self.resplit(*self.prepare_data(extractor, False))
 
         batch_size = 50
         num_classes = 3
@@ -587,9 +596,9 @@ class PD:
             extractor = self.get_pd_features_map_tree_distance
 
         if data:
-            x_train, x_test, y_train, y_test = data
+            x_train, x_test, y_train, y_test = self.resplit(*data)
         else:
-            x_train, x_test, y_train, y_test = self.prepare_data(extractor, False)
+            x_train, x_test, y_train, y_test = self.resplit(*self.prepare_data(extractor, False))
 
         x_train_hand = pickle.load(
             open(r'data/hand/pd/hand-features-train.pickle', 'rb'), encoding='latin1')
@@ -598,6 +607,8 @@ class PD:
 
         x_train_hand = np.array(x_train_hand)
         x_test_hand = np.array(x_test_hand)
+
+        x_train_hand, x_test_hand, _, _ = self.resplit(x_train_hand, x_test_hand, x_train_hand, x_test_hand)
 
         batch_size = 50
         num_classes = 3
@@ -651,21 +662,21 @@ class PD:
 
     def grid_search_pd_keras(self):
         tasks = [
-            {
-                'name': 'CNN (baseline, w2v)',
-                'fit': self.train_pd_keras_w2v,
-                'extractor': self.get_pd_features_ignore_category
-            },
-            {
-                'name': 'CNN (linear, w2v)',
-                'fit': self.train_pd_keras_w2v,
-                'extractor': self.get_pd_features_map_linear_distance
-            },
-            {
-                'name': 'CNN (tree, w2v)',
-                'fit': self.train_pd_keras_w2v,
-                'extractor': self.get_pd_features_map_tree_distance
-            },
+            # {
+            #     'name': 'CNN (baseline, w2v)',
+            #     'fit': self.train_pd_keras_w2v,
+            #     'extractor': self.get_pd_features_ignore_category
+            # },
+            # {
+            #     'name': 'CNN (linear, w2v)',
+            #     'fit': self.train_pd_keras_w2v,
+            #     'extractor': self.get_pd_features_map_linear_distance
+            # },
+            # {
+            #     'name': 'CNN (tree, w2v)',
+            #     'fit': self.train_pd_keras_w2v,
+            #     'extractor': self.get_pd_features_map_tree_distance
+            # },
             {
                 'name': 'CNN (tree, both)',
                 'fit': self.train_pd_keras_both,
