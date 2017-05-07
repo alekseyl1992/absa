@@ -323,7 +323,8 @@ class PD:
         self.stemmer = PorterStemmer()
 
         print('Loading parser...')
-        self.parser = load_core_nlp_parser()
+        # self.parser = load_core_nlp_parser()
+        self.parser = 'mock'
 
         print('Loading datasets...')
         ds_train = load_dataset(r'data/restaurants_train.xml')
