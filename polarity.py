@@ -620,7 +620,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 300
+        epochs = 3000
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
