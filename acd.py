@@ -7,12 +7,13 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from nltk import pprint
 from nltk.tokenize import WordPunctTokenizer
-from sklearn.model_selection import ShuffleSplit, GridSearchCV
+from sklearn.model_selection import ShuffleSplit, GridSearchCV, train_test_split
 from sklearn.model_selection import validation_curve
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.svm import SVC
+from sklearn.utils import shuffle
 
 from plotter import plot_learning_curve
 from utils import load_dataset, get_acd_ds, get_f1, category_fdist, load_w2v
@@ -226,6 +227,13 @@ class ACD:
 
         plt.show()
 
+    def resplit(self, x_train, x_test, y_train, y_test):
+        x = np.concatenate([x_train, x_test])
+        y = np.concatenate([y_train, y_test])
+
+        x, y = shuffle(x, y, random_state=3)
+        return train_test_split(x, y, random_state=3)
+
     def train_acd(self):
         print('-- ACD:')
 
@@ -241,6 +249,9 @@ class ACD:
         x_test, y_test = get_acd_ds(ds_test, fdist, self.get_acd_features)
         x_test_hand = pickle.load(
             open(r'data/hand/acd/acd-rest-test.pickle', 'rb'), encoding='latin1')
+
+        x_train, x_test, y_train, y_test = self.resplit(x_train, x_test, y_train, y_test)
+        x_train_hand, x_test_hand, _, _ = self.resplit(x_train_hand, x_test_hand, x_train_hand, x_test_hand)
 
         merged_train = np.concatenate([x_train, x_train_hand], axis=1)
         merged_test = np.concatenate([x_test, x_test_hand], axis=1)

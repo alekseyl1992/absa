@@ -398,8 +398,8 @@ class PD:
         x = np.concatenate([x_train, x_test])
         y = np.concatenate([y_train, y_test])
 
-        x, y = shuffle(x, y, random_state=1)
-        return train_test_split(x, y, random_state=1)
+        x, y = shuffle(x, y, random_state=3)
+        return train_test_split(x, y, random_state=3)
 
     def grid_search_pd(self, datasets, n_jobs=1):
         append_data, append_data_merged, baseline_data, baseline_data_merged,\
@@ -620,7 +620,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 3000
+        epochs = 300
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
@@ -634,38 +634,32 @@ class PD:
         for kernel_size in [(3,), (4,), (5,)]:
             conv = Convolution1D(filters=200,
                                  kernel_size=kernel_size,
-                                 activation='relu',
-                                 kernel_regularizer=regularizers.l2(0.001),
-                                 activity_regularizer=regularizers.l1(0.001))(input)
+                                 activation='relu')(input)
             pool = GlobalMaxPooling1D()(conv)
             convs.append(pool)
 
         convs = layers.concatenate(convs)
-        dropout = Dropout(0.01)(convs)
+        dropout = Dropout(0.5)(convs)
 
-        pre_output = Dense(50, activation='sigmoid')(dropout)
-        input_hand = Input(shape=(59,))
+        pre_output = Dense(50, activation='relu')(dropout)
         input_avg = Input(shape=(600,))
+        input_hand = Input(shape=(59,))
 
-        merged = layers.concatenate([pre_output, input_hand, input_avg])
+        merged = layers.concatenate([pre_output, input_avg, input_hand])
 
-        dropout2 = Dropout(0.01)(merged)
+        output = Dense(num_classes, activation='softmax')(merged)
 
-        output = Dense(num_classes, activation='softmax',
-                       kernel_regularizer=regularizers.l2(0.0001),
-                       activity_regularizer=regularizers.l1(0.0001))(dropout2)
-
-        model = Model(inputs=[input, input_hand, input_avg], outputs=[output])
+        model = Model(inputs=[input, input_avg, input_hand], outputs=[output])
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        history = model.fit([x_train, x_train_hand, x_train_avg], y_train,
+        history = model.fit([x_train, x_train_avg, x_train_hand], y_train,
                             batch_size=batch_size,
                             epochs=epochs,
                             verbose=2,
-                            validation_data=([x_test, x_test_hand, x_test_avg], y_test))
+                            validation_data=([x_test, x_test_avg, x_test_hand], y_test))
 
         val_acc = history.history['val_acc']
 
@@ -711,7 +705,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 30
+        epochs = 8
 
         lb = LabelBinarizer()
 
@@ -727,7 +721,7 @@ class PD:
 
         convs = []
         for kernel_size in [(3,), (4,), (5,)]:
-            conv = Convolution1D(filters=10,
+            conv = Convolution1D(filters=50,
                                  kernel_size=kernel_size,
                                  activation='relu')(input)
             pool = GlobalMaxPooling1D()(conv)
@@ -736,7 +730,7 @@ class PD:
         convs = layers.concatenate(convs)
         dropout = Dropout(0.5)(convs)
 
-        dense = Dense(10, activation='relu')(dropout)
+        dense = Dense(50, activation='relu')(dropout)
 
         output = Dense(num_classes, activation='softmax')(dense)
         model = Model(inputs=[input], outputs=[output])
@@ -766,103 +760,105 @@ class PD:
         train_activations = new_model.predict(x_train)
         test_activations = new_model.predict(x_test)
 
+        print('Shape: {}'.format(train_activations.shape))
+
         merged_train = np.concatenate([train_activations, x_train_avg, x_train_hand], axis=1)
         merged_test = np.concatenate([test_activations, x_test_avg, x_test_hand], axis=1)
 
-        # scaler = StandardScaler()
-        # merged_all = np.concatenate([merged_train, merged_test], axis=0)
-        # scaler.fit(merged_all)
-        # merged_train = scaler.transform(merged_train)
-        # merged_test = scaler.transform(merged_test)
+        scaler = StandardScaler()
+        merged_all = np.concatenate([merged_train, merged_test], axis=0)
+        scaler.fit(merged_all)
+        merged_train = scaler.transform(merged_train)
+        merged_test = scaler.transform(merged_test)
 
-        # clf1 = SVC(kernel='linear', C=1, random_state=1, probability=True)
-        # clf1.fit(merged_train, y_train_raw)
-        # predictions1 = clf1.predict_proba(merged_test)
+        clf1 = SVC(kernel='linear', C=0.001, random_state=1, probability=True)
+        clf1.fit(merged_train, y_train_raw)
+        predictions1 = clf1.predict_proba(merged_test)
+
+        clf2_train = np.concatenate([x_train_avg, x_train_hand], axis=1)
+        clf2_test = np.concatenate([x_test_avg, x_test_hand], axis=1)
+
+        clf2 = SVC(kernel='linear', C=1.3, random_state=1, probability=True)
+        clf2.fit(clf2_train, y_train_raw)
+        predictions2 = clf2.predict_proba(clf2_test)
+
+        score1 = self.score_proba(predictions1, y_test_raw, clf1.classes_)
+        score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
+
+        assert (clf1.classes_ == clf2.classes_).all()
+
+        predictions_ens = np.average([predictions1, predictions2 * 2], axis=0)
+        score_ens = self.score_proba(predictions_ens, y_test_raw, clf1.classes_)
+
+        print('Scores: {}'.format([score1, score2, score_ens]))
+
+        # tasks = [
+        #     {
+        #         'clf': SVC(kernel='linear', C=0.1, random_state=1),
+        #         'name': 'SVM (linear)',
+        #         'params': {
+        #             'C': np.concatenate([
+        #                 np.linspace(0.001, 0.01, 10),
+        #                 np.linspace(0.01, 0.1, 10),
+        #                 np.linspace(0.1, 10, 10),
+        #             ])
+        #         }
+        #     },
+        #     # {
+        #     #     'clf': SVC(kernel='rbf', C=0.1, random_state=1),
+        #     #     'name': 'SVM (rbf)',
+        #     #     'params': {
+        #     #         'C': np.linspace(0.01, 10, 20)
+        #     #     }
+        #     # },
+        # ]
         #
-        # clf2_train = np.concatenate([x_train_avg, x_train_hand], axis=1)
-        # clf2_test = np.concatenate([x_test_avg, x_test_hand], axis=1)
+        # results = []
         #
-        # clf2 = SVC(kernel='linear', C=1.3, random_state=1, probability=True)
-        # clf2.fit(clf2_train, y_train_raw)
-        # predictions2 = clf2.predict_proba(clf2_test)
+        # for _, task in enumerate(tasks):
+        #     name = task['name']
+        #     clf = task['clf']
+        #     params = task['params']
+        #     print('Running {}...'.format(name))
         #
-        # score1 = self.score_proba(predictions1, y_test_raw, clf1.classes_)
-        # score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
+        #     grid_cv = GridSearchCV(clf, param_grid=params, n_jobs=4)
+        #     grid_cv.fit(merged_train, y_train_raw)
         #
-        # assert (clf1.classes_ == clf2.classes_).all()
+        #     scores = grid_cv.cv_results_
         #
-        # predictions_ens = np.average([predictions1, predictions2], axis=0)
-        # score_ens = self.score_proba(predictions_ens, y_test_raw, clf1.classes_)
+        #     plt.figure(_)
+        #     plt.grid(True)
         #
-        # print('Scores: {}'.format([score1, score2, score_ens]))
-
-        tasks = [
-            {
-                'clf': SVC(kernel='linear', C=0.1, random_state=1),
-                'name': 'SVM (linear)',
-                'params': {
-                    'C': np.concatenate([
-                        np.linspace(0.001, 0.01, 10),
-                        np.linspace(0.01, 0.1, 10),
-                        np.linspace(0.1, 10, 10),
-                    ])
-                }
-            },
-            {
-                'clf': SVC(kernel='rbf', C=0.1, random_state=1),
-                'name': 'SVM (rbf)',
-                'params': {
-                    'C': np.linspace(0.01, 10, 20)
-                }
-            },
-        ]
-
-        results = []
-
-        for _, task in enumerate(tasks):
-            name = task['name']
-            clf = task['clf']
-            params = task['params']
-            print('Running {}...'.format(name))
-
-            grid_cv = GridSearchCV(clf, param_grid=params, n_jobs=4)
-            grid_cv.fit(merged_train, y_train_raw)
-
-            scores = grid_cv.cv_results_
-
-            plt.figure(_)
-            plt.grid(True)
-
-            plt_x_name = list(params.keys())[0]
-            param_title = plt_x_name.replace('estimator__', '')
-
-            plt_y_name = 'Mean Accuracy'
-
-            self.print_scores(scores, plt_x_name, param_title, plt_y_name)
-
-            test_score = grid_cv.score(merged_test, y_test_raw)
-
-            results.append((name, scores, test_score, plt_x_name, param_title))
-
-            plt_x = list(map(
-                lambda s: s[plt_x_name],
-                scores['params']
-            ))
-            plt_y = list(map(
-                lambda s: s,
-                scores['mean_test_score']
-            ))
-
-            plt.title(name)
-            plt.xlabel(param_title)
-            plt.ylabel(plt_y_name)
-
-            plt.plot(plt_x, plt_y)
-
-        print('Grid search results:')
-        self.print_results(results)
-
-        plt.show()
+        #     plt_x_name = list(params.keys())[0]
+        #     param_title = plt_x_name.replace('estimator__', '')
+        #
+        #     plt_y_name = 'Mean Accuracy'
+        #
+        #     self.print_scores(scores, plt_x_name, param_title, plt_y_name)
+        #
+        #     test_score = grid_cv.score(merged_test, y_test_raw)
+        #
+        #     results.append((name, scores, test_score, plt_x_name, param_title))
+        #
+        #     plt_x = list(map(
+        #         lambda s: s[plt_x_name],
+        #         scores['params']
+        #     ))
+        #     plt_y = list(map(
+        #         lambda s: s,
+        #         scores['mean_test_score']
+        #     ))
+        #
+        #     plt.title(name)
+        #     plt.xlabel(param_title)
+        #     plt.ylabel(plt_y_name)
+        #
+        #     plt.plot(plt_x, plt_y)
+        #
+        # print('Grid search results:')
+        # self.print_results(results)
+        #
+        # plt.show()
 
     def grid_search_pd_keras(self):
         tasks = [
