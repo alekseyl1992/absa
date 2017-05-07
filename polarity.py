@@ -785,12 +785,20 @@ class PD:
         score1 = self.score_proba(predictions1, y_test_raw, clf1.classes_)
         score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
 
+        print('Scores: {}'.format([score1, score2]))
+
         assert (clf1.classes_ == clf2.classes_).all()
 
-        predictions_ens = np.average([predictions1, predictions2 * 2], axis=0)
-        score_ens = self.score_proba(predictions_ens, y_test_raw, clf1.classes_)
+        ens_data = []
+        for i in np.arange(0.5, 10, step=0.1):
+            predictions_ens = np.average([predictions1, predictions2 * i], axis=0)
+            score_ens = self.score_proba(predictions_ens, y_test_raw, clf1.classes_)
+            ens_data.append((i, score_ens))
 
-        print('Scores: {}'.format([score1, score2, score_ens]))
+        df = pd.DataFrame(columns=['Mult', 'Score'],
+                          data=ens_data)
+
+        print(df)
 
         # tasks = [
         #     {
