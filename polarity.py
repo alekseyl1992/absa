@@ -674,9 +674,6 @@ class PD:
         classes = np.array(classes)
         predictions = classes[predictions]
 
-        print('predictions: {}'.format(predictions.shape))
-        print('actuals: {}'.format(actuals.shape))
-
         trues = (predictions == actuals).sum()
 
         return trues / len(predictions)
@@ -751,30 +748,30 @@ class PD:
         max_val_acc_epoch = np.argmax(val_acc) + 1
         print('Max val_acc: {} (epoch: {})'.format(max_val_acc, max_val_acc_epoch))
 
-        new_model = Model(inputs=[input], outputs=[dense])
-
-        new_model.compile(loss=keras.losses.categorical_crossentropy,
-                          optimizer=keras.optimizers.Adadelta(),
-                          metrics=['accuracy'])
-
-        train_activations = new_model.predict(x_train)
-        test_activations = new_model.predict(x_test)
-
-        print('Shape: {}'.format(train_activations.shape))
-
-        merged_train = np.concatenate([train_activations, x_train_avg, x_train_hand], axis=1)
-        merged_test = np.concatenate([test_activations, x_test_avg, x_test_hand], axis=1)
-
-        scaler = StandardScaler()
-        merged_all = np.concatenate([merged_train, merged_test], axis=0)
-        scaler.fit(merged_all)
-        merged_train = scaler.transform(merged_train)
-        merged_test = scaler.transform(merged_test)
-
-        clf1 = SVC(kernel='linear', C=0.001, random_state=1, probability=True)
-        clf1.fit(merged_train, y_train_raw)
-        predictions1 = clf1.predict_proba(merged_test)
-
+        # new_model = Model(inputs=[input], outputs=[dense])
+        #
+        # new_model.compile(loss=keras.losses.categorical_crossentropy,
+        #                   optimizer=keras.optimizers.Adadelta(),
+        #                   metrics=['accuracy'])
+        #
+        # train_activations = new_model.predict(x_train)
+        # test_activations = new_model.predict(x_test)
+        #
+        # print('Shape: {}'.format(train_activations.shape))
+        #
+        # merged_train = np.concatenate([train_activations, x_train_avg, x_train_hand], axis=1)
+        # merged_test = np.concatenate([test_activations, x_test_avg, x_test_hand], axis=1)
+        #
+        # scaler = StandardScaler()
+        # merged_all = np.concatenate([merged_train, merged_test], axis=0)
+        # scaler.fit(merged_all)
+        # merged_train = scaler.transform(merged_train)
+        # merged_test = scaler.transform(merged_test)
+        #
+        # clf1 = SVC(kernel='linear', C=0.001, random_state=1, probability=True)
+        # clf1.fit(merged_train, y_train_raw)
+        # predictions1 = clf1.predict_proba(merged_test)
+        #
         clf2_train = np.concatenate([x_train_avg, x_train_hand], axis=1)
         clf2_test = np.concatenate([x_test_avg, x_test_hand], axis=1)
 
@@ -782,17 +779,19 @@ class PD:
         clf2.fit(clf2_train, y_train_raw)
         predictions2 = clf2.predict_proba(clf2_test)
 
-        score1 = self.score_proba(predictions1, y_test_raw, clf1.classes_)
+        predictions1 = model.predict(x_test)
+
+        score1 = max_val_acc
         score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
 
         print('Scores: {}'.format([score1, score2]))
 
-        assert (clf1.classes_ == clf2.classes_).all()
+        # assert (clf1.classes_ == clf2.classes_).all()
 
         ens_data = []
-        for i in np.arange(0.5, 10, step=0.1):
+        for i in np.arange(0.5, 3.6, step=0.1):
             predictions_ens = np.average([predictions1, predictions2 * i], axis=0)
-            score_ens = self.score_proba(predictions_ens, y_test_raw, clf1.classes_)
+            score_ens = self.score_proba(predictions_ens, y_test_raw, clf2.classes_)
             ens_data.append((i, score_ens))
 
         df = pd.DataFrame(columns=['Mult', 'Score'],
