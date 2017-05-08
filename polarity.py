@@ -554,7 +554,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 100
+        epochs = 20
 
         lb = LabelBinarizer()
         y_train = lb.fit_transform(y_train)
@@ -588,6 +588,8 @@ class PD:
                             epochs=epochs,
                             verbose=1,
                             validation_data=(x_test, y_test))
+
+        self.plot_history(history)
 
         val_acc = history.history['val_acc']
 
@@ -718,7 +720,9 @@ class PD:
 
         x_train_hand, x_test_hand, _, _ = self.resplit(x_train_hand, x_test_hand, x_train_hand, x_test_hand)
 
-        x_train_avg, x_test_avg, y_train_avg, y_test_avg = self.resplit(*self.prepare_data(self.get_pd_features_append_category, True))
+        x_train_avg, x_test_avg, y_train_avg, y_test_avg = self.resplit(
+            *self.prepare_data(self.get_pd_features_map_linear_cut_off, True))
+
         assert (y_train_avg == y_train).all()
 
         batch_size = 50
@@ -798,7 +802,7 @@ class PD:
         clf2_train = np.concatenate([x_train_avg, x_train_hand], axis=1)
         clf2_test = np.concatenate([x_test_avg, x_test_hand], axis=1)
 
-        clf2 = SVC(kernel='linear', C=1.3, random_state=1, probability=True)
+        clf2 = SVC(kernel='linear', C=1.1, random_state=1, probability=True)
         clf2.fit(clf2_train, y_train_raw)
         predictions2 = clf2.predict_proba(clf2_test)
 
@@ -853,11 +857,11 @@ class PD:
                 'fit': self.train_pd_keras_w2v,
                 'extractor': self.get_pd_features_map_tree_distance
             },
-            {
-                'name': 'Ensemble',
-                'fit': self.train_pd_keras_both_svm,
-                'extractor': self.get_pd_features_map_tree_distance
-            },
+            # {
+            #     'name': 'Ensemble',
+            #     'fit': self.train_pd_keras_both_svm,
+            #     'extractor': self.get_pd_features_map_tree_distance
+            # },
         ]
 
         results = []
