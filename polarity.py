@@ -678,6 +678,27 @@ class PD:
 
         return trues / len(predictions)
 
+    def plot_history(self, hist):
+        # summarize history for accuracy
+        plt.plot(hist.history['acc'])
+        plt.plot(hist.history['val_acc'])
+        plt.title('Accuracy')
+        plt.ylabel('accuracy')
+        plt.xlabel('epoch')
+        plt.legend(['train', 'test'], loc='upper left')
+        plt.grid(True)
+        plt.show()
+
+        # summarize history for loss
+        plt.plot(hist.history['loss'])
+        plt.plot(hist.history['val_loss'])
+        plt.title('Loss')
+        plt.ylabel('loss')
+        plt.xlabel('epoch')
+        plt.legend(['train', 'test'], loc='upper left')
+        plt.grid(True)
+        plt.show()
+
     def train_pd_keras_both_svm(self, extractor=None, data=None):
         if extractor is None:
             extractor = self.get_pd_features_map_tree_distance
@@ -702,7 +723,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 8
+        epochs = 274
 
         lb = LabelBinarizer()
 
@@ -718,29 +739,42 @@ class PD:
 
         convs = []
         for kernel_size in [(3,), (4,), (5,)]:
-            conv = Convolution1D(filters=50,
+            conv = Convolution1D(filters=200,
                                  kernel_size=kernel_size,
-                                 activation='relu')(input)
+                                 activation='relu',
+                                 kernel_regularizer=regularizers.l2(0.001),
+                                 activity_regularizer=regularizers.l1(0.001))(input)
             pool = GlobalMaxPooling1D()(conv)
             convs.append(pool)
 
         convs = layers.concatenate(convs)
-        dropout = Dropout(0.5)(convs)
+        dropout = Dropout(0.01)(convs)
 
-        dense = Dense(50, activation='relu')(dropout)
+        pre_output = Dense(50, activation='sigmoid')(dropout)
+        input_hand = Input(shape=(59,))
+        input_avg = Input(shape=(600,))
 
-        output = Dense(num_classes, activation='softmax')(dense)
-        model = Model(inputs=[input], outputs=[output])
+        merged = layers.concatenate([pre_output, input_hand, input_avg])
+
+        dropout2 = Dropout(0.01)(merged)
+
+        output = Dense(num_classes, activation='softmax',
+                       kernel_regularizer=regularizers.l2(0.0001),
+                       activity_regularizer=regularizers.l1(0.0001))(dropout2)
+
+        model = Model(inputs=[input, input_hand, input_avg], outputs=[output])
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        history = model.fit(x_train, y_train,
+        history = model.fit([x_train, x_train_hand, x_train_avg], y_train,
                             batch_size=batch_size,
                             epochs=epochs,
-                            verbose=1,
-                            validation_data=(x_test, y_test))
+                            verbose=2,
+                            validation_data=([x_test, x_test_hand, x_test_avg], y_test))
+
+        self.plot_history(history)
 
         val_acc = history.history['val_acc']
 
@@ -758,7 +792,7 @@ class PD:
         # test_activations = new_model.predict(x_test)
         #
         # print('Shape: {}'.format(train_activations.shape))
-        #
+
         # merged_train = np.concatenate([train_activations, x_train_avg, x_train_hand], axis=1)
         # merged_test = np.concatenate([test_activations, x_test_avg, x_test_hand], axis=1)
         #
@@ -767,10 +801,10 @@ class PD:
         # scaler.fit(merged_all)
         # merged_train = scaler.transform(merged_train)
         # merged_test = scaler.transform(merged_test)
-        #
-        # clf1 = SVC(kernel='linear', C=0.001, random_state=1, probability=True)
-        # clf1.fit(merged_train, y_train_raw)
-        # predictions1 = clf1.predict_proba(merged_test)
+
+        # clf1 = SVC(kernel='linear', C=1, random_state=1, probability=True)
+        # clf1.fit(train_activations, y_train_raw)
+        # predictions1 = clf1.predict_proba(test_activations)
         #
         clf2_train = np.concatenate([x_train_avg, x_train_hand], axis=1)
         clf2_test = np.concatenate([x_test_avg, x_test_hand], axis=1)
@@ -779,17 +813,15 @@ class PD:
         clf2.fit(clf2_train, y_train_raw)
         predictions2 = clf2.predict_proba(clf2_test)
 
-        predictions1 = model.predict(x_test)
+        predictions1 = model.predict([x_test, x_test_hand, x_test_avg])
 
         score1 = max_val_acc
         score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
 
         print('Scores: {}'.format([score1, score2]))
 
-        # assert (clf1.classes_ == clf2.classes_).all()
-
         ens_data = []
-        for i in np.arange(0.5, 3.6, step=0.1):
+        for i in np.arange(0.5, 5, step=0.1):
             predictions_ens = np.average([predictions1, predictions2 * i], axis=0)
             score_ens = self.score_proba(predictions_ens, y_test_raw, clf2.classes_)
             ens_data.append((i, score_ens))
@@ -799,94 +831,42 @@ class PD:
 
         print(df)
 
-        # tasks = [
-        #     {
-        #         'clf': SVC(kernel='linear', C=0.1, random_state=1),
-        #         'name': 'SVM (linear)',
-        #         'params': {
-        #             'C': np.concatenate([
-        #                 np.linspace(0.001, 0.01, 10),
-        #                 np.linspace(0.01, 0.1, 10),
-        #                 np.linspace(0.1, 10, 10),
-        #             ])
-        #         }
-        #     },
-        #     # {
-        #     #     'clf': SVC(kernel='rbf', C=0.1, random_state=1),
-        #     #     'name': 'SVM (rbf)',
-        #     #     'params': {
-        #     #         'C': np.linspace(0.01, 10, 20)
-        #     #     }
-        #     # },
-        # ]
-        #
-        # results = []
-        #
-        # for _, task in enumerate(tasks):
-        #     name = task['name']
-        #     clf = task['clf']
-        #     params = task['params']
-        #     print('Running {}...'.format(name))
-        #
-        #     grid_cv = GridSearchCV(clf, param_grid=params, n_jobs=4)
-        #     grid_cv.fit(merged_train, y_train_raw)
-        #
-        #     scores = grid_cv.cv_results_
-        #
-        #     plt.figure(_)
-        #     plt.grid(True)
-        #
-        #     plt_x_name = list(params.keys())[0]
-        #     param_title = plt_x_name.replace('estimator__', '')
-        #
-        #     plt_y_name = 'Mean Accuracy'
-        #
-        #     self.print_scores(scores, plt_x_name, param_title, plt_y_name)
-        #
-        #     test_score = grid_cv.score(merged_test, y_test_raw)
-        #
-        #     results.append((name, scores, test_score, plt_x_name, param_title))
-        #
-        #     plt_x = list(map(
-        #         lambda s: s[plt_x_name],
-        #         scores['params']
-        #     ))
-        #     plt_y = list(map(
-        #         lambda s: s,
-        #         scores['mean_test_score']
-        #     ))
-        #
-        #     plt.title(name)
-        #     plt.xlabel(param_title)
-        #     plt.ylabel(plt_y_name)
-        #
-        #     plt.plot(plt_x, plt_y)
-        #
-        # print('Grid search results:')
-        # self.print_results(results)
-        #
-        # plt.show()
+        scores = list(map(lambda t: t[1], ens_data))
+        mults = list(map(lambda t: t[0], ens_data))
+        max_score = np.max(scores)
+        max_score_mult = mults[np.argmax(scores)]
+
+        print('max_score_mult: {}'.format(max_score_mult))
+
+        plt.plot(mults, scores)
+        plt.title('Ensemble balance')
+        plt.ylabel('Accuracy')
+        plt.xlabel('Multiplier')
+        plt.grid(True)
+        plt.show()
+
+        return max_score
 
     def grid_search_pd_keras(self):
         tasks = [
-            # {
-            #     'name': 'CNN (baseline, w2v)',
-            #     'fit': self.train_pd_keras_w2v,
-            #     'extractor': self.get_pd_features_ignore_category
-            # },
-            # {
-            #     'name': 'CNN (linear, w2v)',
-            #     'fit': self.train_pd_keras_w2v,
-            #     'extractor': self.get_pd_features_map_linear_distance
-            # },
-            # {
-            #     'name': 'CNN (tree, w2v)',
-            #     'fit': self.train_pd_keras_w2v,
-            #     'extractor': self.get_pd_features_map_tree_distance
-            # },
             {
-                'name': 'CNN (tree, both)',
-                'fit': self.train_pd_keras_both,
+                'name': 'CNN (baseline, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_ignore_category
+            },
+            {
+                'name': 'CNN (linear, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_map_linear_distance
+            },
+            {
+                'name': 'CNN (tree, w2v)',
+                'fit': self.train_pd_keras_w2v,
+                'extractor': self.get_pd_features_map_tree_distance
+            },
+            {
+                'name': 'Ensemble',
+                'fit': self.train_pd_keras_both_svm,
                 'extractor': self.get_pd_features_map_tree_distance
             },
         ]
