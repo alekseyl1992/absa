@@ -723,7 +723,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 274
+        epochs = 8
 
         lb = LabelBinarizer()
 
@@ -739,40 +739,29 @@ class PD:
 
         convs = []
         for kernel_size in [(3,), (4,), (5,)]:
-            conv = Convolution1D(filters=200,
+            conv = Convolution1D(filters=50,
                                  kernel_size=kernel_size,
-                                 activation='relu',
-                                 kernel_regularizer=regularizers.l2(0.001),
-                                 activity_regularizer=regularizers.l1(0.001))(input)
+                                 activation='relu')(input)
             pool = GlobalMaxPooling1D()(conv)
             convs.append(pool)
 
         convs = layers.concatenate(convs)
-        dropout = Dropout(0.01)(convs)
+        dropout = Dropout(0.5)(convs)
 
-        pre_output = Dense(50, activation='sigmoid')(dropout)
-        input_hand = Input(shape=(59,))
-        input_avg = Input(shape=(600,))
+        dense = Dense(50, activation='relu')(dropout)
 
-        merged = layers.concatenate([pre_output, input_hand, input_avg])
-
-        dropout2 = Dropout(0.01)(merged)
-
-        output = Dense(num_classes, activation='softmax',
-                       kernel_regularizer=regularizers.l2(0.0001),
-                       activity_regularizer=regularizers.l1(0.0001))(dropout2)
-
-        model = Model(inputs=[input, input_hand, input_avg], outputs=[output])
+        output = Dense(num_classes, activation='softmax')(dense)
+        model = Model(inputs=[input], outputs=[output])
 
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
 
-        history = model.fit([x_train, x_train_hand, x_train_avg], y_train,
+        history = model.fit(x_train, y_train,
                             batch_size=batch_size,
                             epochs=epochs,
-                            verbose=2,
-                            validation_data=([x_test, x_test_hand, x_test_avg], y_test))
+                            verbose=1,
+                            validation_data=(x_test, y_test))
 
         self.plot_history(history)
 
@@ -813,7 +802,7 @@ class PD:
         clf2.fit(clf2_train, y_train_raw)
         predictions2 = clf2.predict_proba(clf2_test)
 
-        predictions1 = model.predict([x_test, x_test_hand, x_test_avg])
+        predictions1 = model.predict(x_test)
 
         score1 = max_val_acc
         score2 = self.score_proba(predictions2, y_test_raw, clf2.classes_)
