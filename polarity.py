@@ -108,9 +108,9 @@ class PD:
 
         return self.get_pd_features_ignore_category(text, category, cats_len)
 
-    def get_pd_features_map_linear_cut_off(self, text, category, cats_len, sents, ote_):
+    def get_pd_features_map_linear_cut_off(self, text, category, cats_len, sents, ote_, sample_id):
         tokens = self.tokenizer.tokenize(text)
-        (position, ote), word2score = self.acd.predict_ote_for_category(tokens, category)
+        (position, ote), word2score = self.acd.predict_ote_for_category(tokens, category, sample_id)
 
         if cats_len != 1 and ote is not None:
             distance_limit = 2
@@ -250,14 +250,14 @@ class PD:
 
         return distance_matrix
 
-    def get_pd_features_map_tree_distance(self, text, category, cats_len, sents, ote):
+    def get_pd_features_map_tree_distance(self, text, category, cats_len, sents, ote, sample_id):
         tree = sents[0][1]
 
         tokens = list(map(lambda token: token.lower(), tree.leaves()))
 
         distance_matrix = np.array(self.get_tree_distance_matrix(tree))
         h = tree.height()
-        word2score = self.acd.get_word2score(tokens, category)
+        word2score = self.acd.get_word2score(tokens, category, sample_id)
         p_i = np.array([score
                         for (_, score) in word2score])
 
@@ -727,7 +727,7 @@ class PD:
 
         batch_size = 50
         num_classes = 3
-        epochs = 8
+        epochs = 12
 
         lb = LabelBinarizer()
 

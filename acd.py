@@ -28,6 +28,9 @@ class ACD:
         self.plot_f1s = False
         self.clf = None
 
+        self.x_test_hand = None
+        self.x_train_hand = None
+
         print('Loading tokenizer...')
         self.tokenizer = WordPunctTokenizer()
 
@@ -258,36 +261,51 @@ class ACD:
 
         self.mlb = MultiLabelBinarizer()
         clf = OneVsRestClassifier(
-            SVC(kernel='rbf', C=80, probability=True, random_state=1))
+            SVC(kernel='linear', C=0.478947368421, probability=True, random_state=1))
 
         y_train = self.mlb.fit_transform(y_train)
         y_test = self.mlb.fit_transform(y_test)
 
         print('Training...')
-        clf.fit(x_train, y_train)
+        clf.fit(merged_train, y_train)
 
         print('Evaluating...')
-        self.plot_f1s = False
-        score = self.scoring_fun(clf, x_test, y_test)
+        self.plot_f1s = True
+        score = self.scoring_fun(clf, merged_test, y_test)
         print('F1: {}'.format(score))
 
         self.clf = clf
 
-    def predict(self, sent):
+    def predict(self, sent, sample_id=None):
         features = self.get_acd_features(sent)
+
+        if sample_id is not None:
+            if self.x_test_hand is None:
+                self.x_test_hand = pickle.load(
+                    open(r'data/hand/acd/acd-rest-test.pickle', 'rb'), encoding='latin1')
+
+            if self.x_train_hand is None:
+                self.x_train_hand = pickle.load(
+                    open(r'data/hand/acd/acd-rest-train.pickle', 'rb'), encoding='latin1')
+
+            if sample_id[0] == 'test':
+                features = np.concatenate([features, self.x_test_hand[sample_id[1]]])
+            else:
+                features = np.concatenate([features, self.x_train_hand[sample_id[1]]])
+
         predicted = self.clf.predict_proba([features])[0]
         classes = self.mlb.classes_
 
         return sorted(zip(classes, predicted), key=lambda tup: -tup[1])
 
-    def predict_many(self, sents, just_top_one=True):
+    def predict_many(self, sents, just_top_one=True, sample_id=None):
         results = []
         for sent in sents:
             if sent is None:
                 results.append((None, []))
                 continue
 
-            prediction = self.predict(sent)
+            prediction = self.predict(sent, sample_id)
             if just_top_one:
                 results.append((sent, prediction[0]))
             else:
@@ -314,18 +332,18 @@ class ACD:
 
         return results
 
-    def predict_ote_for_category(self, tokens, cat):
-        per_word_cats = self.predict_many(tokens, False)
+    def predict_ote_for_category(self, tokens, cat, sample_id):
+        per_word_cats = self.predict_many(tokens, False, sample_id)
         _, word2score = self.find_word_with_highest_score(per_word_cats, cat)
 
         tokens = self.filter_nouns(tokens)
-        per_word_cats = self.predict_many(tokens, False)
+        per_word_cats = self.predict_many(tokens, False, sample_id)
         ote, _ = self.find_word_with_highest_score(per_word_cats, cat)
 
         return ote, word2score
 
-    def get_word2score(self, tokens, cat):
-        per_word_cats = self.predict_many(tokens, False)
+    def get_word2score(self, tokens, cat, sample_id):
+        per_word_cats = self.predict_many(tokens, False, sample_id)
         _, word2score = self.find_word_with_highest_score(per_word_cats, cat)
         return word2score
 

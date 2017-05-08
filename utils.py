@@ -189,8 +189,14 @@ def get_pd_ds(source_ds, feature_extractor, parser=None, splitter=None, path=Non
         for opinion in source_entry.opinions:
             sents = preprocessed[i] if preprocessed else []
             ote = opinion.ote
+
+            if 'train' in path:
+                sample_id = ('train', i)
+            else:
+                sample_id = ('test', i)
+
             features.append(feature_extractor(
-                source_entry.text, opinion.category, cats_len, sents, ote))
+                source_entry.text, opinion.category, cats_len, sents, ote, sample_id))
             labels.append(opinion.polarity)
 
         if i % 100 == 0:
