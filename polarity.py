@@ -9,6 +9,7 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.utils import shuffle
 
 from acd import ACD
+from base import BaseTask
 
 np.random.seed(1337)  # for reproducibility
 
@@ -28,10 +29,10 @@ from sklearn.svm import SVC
 from utils import load_dataset, split_ds, load_w2v, get_pd_ds, load_core_nlp_parser
 
 
-class PD:
+class PD(BaseTask):
     def __init__(self, w2v, acd):
-        self.w2v = w2v
-        self.tokenizer = None
+        super().__init__(w2v)
+
         self.stemmer = None
         self.parser = None
         self.clf = None
@@ -39,19 +40,6 @@ class PD:
 
         self.max_sentence_len = 30
         self.average_vectors = True
-
-        self.stop_words = [
-            'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself',
-            'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself',
-            'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these',
-            'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do',
-            'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while',
-            'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before',
-            'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again',
-            'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each',
-            'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
-            'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
-        ]
 
     def reshape(self, vectors):
         if self.average_vectors:
@@ -335,7 +323,7 @@ class PD:
             ds_test, feature_extractor, self.parser, my_split_on_sents, r'data/restaurants_test.xml')
         return x_train, x_test, y_train, y_test
 
-    def train_pd(self):
+    def train(self):
         x_train, x_test, y_train, y_test = self.prepare_data(self.get_pd_features_map_tree_distance, False)
 
         x_train = x_train.reshape(len(x_train), self.max_sentence_len * 300)
@@ -393,13 +381,6 @@ class PD:
             dataset[2],
             dataset[3]
         )
-
-    def resplit(self, x_train, x_test, y_train, y_test):
-        x = np.concatenate([x_train, x_test])
-        y = np.concatenate([y_train, y_test])
-
-        x, y = shuffle(x, y, random_state=3)
-        return train_test_split(x, y, random_state=3)
 
     def grid_search_pd(self, datasets, n_jobs=1):
         append_data, append_data_merged, baseline_data, baseline_data_merged,\
@@ -760,6 +741,9 @@ class PD:
         model.compile(loss=keras.losses.categorical_crossentropy,
                       optimizer=keras.optimizers.Adadelta(),
                       metrics=['accuracy'])
+
+        model.summary()
+
 
         history = model.fit(x_train, y_train,
                             batch_size=batch_size,
