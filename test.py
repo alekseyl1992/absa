@@ -163,24 +163,23 @@ class ACD:
         tasks = [
             {
                 'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True)),
-                'name': 'SVM',
+                'name': 'SVM (метод опорных векторов)',
                 'params': {
-                    # 'estimator__kernel': ('linear', 'rbf'),
-                    'estimator__C': np.linspace(0.1, 5.0, num=20)
+                    'estimator__C': ('C', np.linspace(0.1, 5.0, num=20))
                 }
             },
             {
                 'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
-                'name': 'Random Forest',
+                'name': 'Random Forest (случайный лес)',
                 'params': {
-                    'estimator__n_estimators': np.arange(1, 60, step=2)
+                    'estimator__n_estimators': ('n_estimators (количество деревьев)', np.arange(1, 60, step=2))
                 }
             },
             {
                 'clf': OneVsRestClassifier(GaussianNB()),
-                'name': 'Gaussian NB',
+                'name': 'Gaussian NB (наивный байесовский классификатор)',
                 'params': {
-                    'n_jobs': [1, 1]
+                    'n_jobs': ('n_jobs', [1, 1])
                 }
             },
             {
@@ -188,9 +187,9 @@ class ACD:
                                      hidden_layer_sizes=(20,),
                                      activation='logistic',
                                      learning_rate='adaptive'),
-                'name': 'MLP (20)',
+                'name': 'MLP (20) (многослойный персептрон)',
                 'params': {
-                    'max_iter': np.arange(100, 2000, step=100)
+                    'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 2000, step=100))
                 }
             },
             {
@@ -198,9 +197,9 @@ class ACD:
                                      hidden_layer_sizes=(156,),
                                      activation='logistic',
                                      learning_rate='adaptive'),
-                'name': 'MLP (156)',
+                'name': 'MLP (156) (многослойный персептрон)',
                 'params': {
-                    'max_iter': np.arange(100, 3000, step=200)
+                    'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 3000, step=200))
                 }
             }
         ]
@@ -213,10 +212,11 @@ class ACD:
         for _, task in enumerate(tasks):
             name = task['name']
             clf = task['clf']
-            params = task['params']
+            params2values = {k: v[1] for k, v in task['params'].items()}
+            params2titles = {k: v[0] for k, v in task['params'].items()}
             print('Running {}...'.format(name))
 
-            grid_cv = GridSearchCV(clf, param_grid=params, scoring=self.scoring_fun)
+            grid_cv = GridSearchCV(clf, param_grid=params2values, scoring=self.scoring_fun)
             grid_cv.fit(x, y)
 
             scores = grid_cv.grid_scores_
@@ -224,11 +224,10 @@ class ACD:
 
             plt.figure(_)
 
-            plt_x_name = list(params.keys())[0]
-            plt_y_name = 'Mean F1'
+            param = list(params2titles.keys())[0]
 
             plt_x = list(map(
-                lambda s: s.parameters[plt_x_name],
+                lambda s: s.parameters[param],
                 scores
             ))
             plt_y = list(map(
@@ -236,10 +235,14 @@ class ACD:
                 scores
             ))
 
+            plt_x_name = list(params2titles.values())[0]
+            plt_y_name = 'F1'
+
             plt.title(name)
             plt.xlabel(plt_x_name)
             plt.ylabel(plt_y_name)
 
+            plt.grid()
             plt.plot(plt_x, plt_y)
         plt.show()
 
