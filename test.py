@@ -50,7 +50,7 @@ class ACD:
         self.tokenizer = None
         self.stemmer = None
         self.mlb = None
-        self.plot_f1s = False
+        self.plot_f1s = True
         self.clf = None
 
         self.stop_words = [
@@ -125,13 +125,14 @@ class ACD:
             pprint(list(zip(steps, f1s)))
 
             plt.figure()
-            plt_x_name = 'Step'
+            plt_x_name = 'Порог'
             plt_y_name = 'F1'
 
-            plt.title('F1 vs Step')
+            plt.title('Зависимость меры F1 от порога классификации')
             plt.xlabel(plt_x_name)
             plt.ylabel(plt_y_name)
 
+            plt.grid()
             plt.plot(steps, f1s)
 
             plt.show()
@@ -155,7 +156,7 @@ class ACD:
     def grid_search_acd(self):
         print('Loading w2v...')
 
-        self.w2v = W2VMock()
+        # self.w2v = W2VMock()
         self.w2v = gensim.models.KeyedVectors.load_word2vec_format('pretrained/GoogleNews-vectors-negative300.bin', binary=True)
 
         print('Loading tokenizer...')
@@ -176,44 +177,44 @@ class ACD:
                 'clf': OneVsRestClassifier(SVC(kernel='rbf', probability=True)),
                 'name': 'SVM (метод опорных векторов)',
                 'params': {
-                    # 'estimator__C': ('C', [3.1947368421052635])
-                    'estimator__C': ('C', np.linspace(0.1, 5.0, num=20))
+                    'estimator__C': ('C', [3.1947368421052635])
+                    # 'estimator__C': ('C', np.linspace(0.1, 5.0, num=20))
                 }
             },
-            {
-                'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
-                'name': 'Random Forest (случайный лес)',
-                'params': {
-                    'estimator__n_estimators': ('n_estimators (количество деревьев)', np.arange(1, 60, step=2))
-                }
-            },
-            {
-                'clf': OneVsRestClassifier(GaussianNB()),
-                'name': 'Gaussian NB (наивный байесовский классификатор)',
-                'params': {
-                    'n_jobs': ('n_jobs', [1, 1])
-                }
-            },
-            {
-                'clf': MLPClassifier(max_iter=500,
-                                     hidden_layer_sizes=(20,),
-                                     activation='logistic',
-                                     learning_rate='adaptive'),
-                'name': 'MLP (20) (многослойный персептрон)',
-                'params': {
-                    'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 2000, step=100))
-                }
-            },
-            {
-                'clf': MLPClassifier(max_iter=500,
-                                     hidden_layer_sizes=(156,),
-                                     activation='logistic',
-                                     learning_rate='adaptive'),
-                'name': 'MLP (156) (многослойный персептрон)',
-                'params': {
-                    'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 3000, step=200))
-                }
-            }
+            # {
+            #     'clf': OneVsRestClassifier(RandomForestClassifier(n_estimators=10)),
+            #     'name': 'Random Forest (случайный лес)',
+            #     'params': {
+            #         'estimator__n_estimators': ('n_estimators (количество деревьев)', np.arange(1, 60, step=2))
+            #     }
+            # },
+            # {
+            #     'clf': OneVsRestClassifier(GaussianNB()),
+            #     'name': 'Gaussian NB (наивный байесовский классификатор)',
+            #     'params': {
+            #         'n_jobs': ('n_jobs', [1, 1])
+            #     }
+            # },
+            # {
+            #     'clf': MLPClassifier(max_iter=500,
+            #                          hidden_layer_sizes=(20,),
+            #                          activation='logistic',
+            #                          learning_rate='adaptive'),
+            #     'name': 'MLP (20) (многослойный персептрон)',
+            #     'params': {
+            #         'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 2000, step=100))
+            #     }
+            # },
+            # {
+            #     'clf': MLPClassifier(max_iter=500,
+            #                          hidden_layer_sizes=(156,),
+            #                          activation='logistic',
+            #                          learning_rate='adaptive'),
+            #     'name': 'MLP (156) (многослойный персептрон)',
+            #     'params': {
+            #         'max_iter': ('max_iter (число итераций обучения)', np.arange(100, 3000, step=200))
+            #     }
+            # }
         ]
 
         y = self.mlb.fit_transform(y)
@@ -341,5 +342,6 @@ class ACD:
 
 if __name__ == '__main__':
     w2v = load_w2v()
+    # w2v = None
     acd = ACD(w2v)
-    acd.train_acd()
+    acd.grid_search_acd()
